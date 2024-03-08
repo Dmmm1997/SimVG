@@ -1,4 +1,4 @@
-data/
+/data/
 *.pyc
 SeqTR.egg-info/
 work_dir/
