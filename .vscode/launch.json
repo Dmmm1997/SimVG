@@ -1,0 +1,57 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "train.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/train.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": { "CUDA_VISIBLE_DEVICES": "1" },
+      "args": [
+        "configs/beit3/detection/multibranch/beit3_tgqshead_predict_as_gt_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
+        // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
+        // "--work-dir", "work_dir/debug/test"
+      ]
+    },
+    {
+      "name": "test.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/test.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/20240302_172934_grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100.py",
+        "--load-from",
+        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/latest.pth"
+      ]
+    },
+    {
+      "name": "inference.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/inference.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/20240302_172934_grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100.py",
+        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/latest.pth",
+        "--output-dir",
+        "visualization/inference"
+      ]
+    },
+    {
+      "name": "this",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "configs/beit3/detection/diff_head/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq1.py"
+      ]
+    }
+  ]
+}
