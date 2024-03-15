@@ -24,7 +24,7 @@ class MIXDETRMB(OneStageModel):
         text_attention_mask=None,
         gt_bbox=None,
         gt_mask_vertices=None,
-        rescale=False
+        rescale=False,
     ):
         """Args:
         img (tensor): [batch_size, c, h_batch, w_batch].
@@ -59,8 +59,8 @@ class MIXDETRMB(OneStageModel):
         output_decoder_branch = output["decoder_branch_output"]
 
         with torch.no_grad():
-            predictions_token_branch = self.get_predictions(output_token_branch, img_metas)
-            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas)
+            predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
+            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
             
         predictions = [predictions_decoder_branch, predictions_token_branch]
             
@@ -106,11 +106,11 @@ class MIXDETRMB(OneStageModel):
         output = self.head.forward_test(img_feat, img_metas, text_feat=text_feat, cls_feat = cls_feat,  with_bbox=with_bbox, with_mask=with_mask)
 
         output_token_branch = output["token_branch_output"]
-        output_decoder_branch = output["decoder_branch_output"]
+        output_decoder_branch = output["decoder_branch_output"] 
 
         with torch.no_grad():
-            predictions_token_branch = self.get_predictions(output_token_branch, img_metas)
-            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas)
+            predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
+            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
             
         predictions = [predictions_decoder_branch, predictions_token_branch]
 
@@ -123,21 +123,29 @@ class MIXDETRMB(OneStageModel):
         results = self.head.inference(box_cls, box_pred, image_sizes)
         # processed_results = []
         pred_bboxes = []
-        for results_per_image, image_size in zip(results, image_sizes):
+        predict_classes = []
+        for results_per_image, img_meta in zip(results, img_metas):
+            image_size = img_meta["img_shape"]
             height = image_size[0]
             width = image_size[1]
             r = detector_postprocess(results_per_image, height, width)
             # infomation extract
             pred_boxes = r.pred_boxes
             scores = r.scores
-            pred_classes = r.pred_classes
+            pred_class = r.pred_classes
             # best index
             best_ind = torch.argmax(scores)
             pred_box = pred_boxes[int(best_ind)].tensor
+            if rescale:
+                scale_factors = img_meta["scale_factor"]
+                pred_box /= pred_box.new_tensor(scale_factors)
+            predict_classes.append(pred_class)
             pred_bboxes.append(pred_box)
             # processed_results.append({"instances": r})
+            
         pred_bboxes = torch.cat(pred_bboxes, dim=0)
+        predict_classes = torch.cat(predict_classes, dim=0)
         pred_masks = None
-        return dict(pred_bboxes=pred_bboxes, pred_masks=pred_masks)
+        return dict(pred_bboxes=pred_bboxes, pred_masks=pred_masks, predict_classes=predict_classes)
     
     

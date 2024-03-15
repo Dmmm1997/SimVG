@@ -126,14 +126,15 @@ class SetCriterion(nn.Module):
         if self.loss_class_type == "ce_loss":
             loss_class = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         elif self.loss_class_type == "weighted_ce_loss":
-            target_weights_o = torch.cat(
-                [
-                    t["weight"][J] if not len(t["weight"][J]) == 0 else torch.tensor([0], device=targets[0]["weight"].device)
-                    for t, (_, J) in zip(targets, indices)
-                ]
-            )
+            target_weights_o = []
+            for t, (_, J) in zip(targets, indices):
+                weight = torch.ones((src_logits.shape[1]), device=src_logits.device)/ 10
+                weight[J] = 1.0
+                # weight[J] = t["weight"][J]
+                target_weights_o.append(weight)
+            target_weights_o = torch.stack(target_weights_o,dim=0)
             loss_class = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight, reduction="none")
-            loss_class = (target_weights_o.squeeze() * loss_class.reshape(-1)).mean()
+            loss_class = (target_weights_o * loss_class).mean(-1).sum()
         elif self.loss_class_type == "focal_loss":
             # src_logits: (b, num_queries, num_classes) = (2, 300, 80)
             # target_classes_one_hot = (2, 300, 80)
@@ -178,7 +179,7 @@ class SetCriterion(nn.Module):
                     for t, (_, J) in zip(targets, indices)
                 ]
             ).squeeze()
-            loss_bbox = loss_bbox.mean(-1) * target_weights_o
+            loss_bbox = loss_bbox.sum(-1) * target_weights_o
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
@@ -196,7 +197,7 @@ class SetCriterion(nn.Module):
                     for t, (_, J) in zip(targets, indices)
                 ]
             ).squeeze()
-            loss_giou = loss_giou.mean(-1) * target_weights_o
+            loss_giou = loss_giou * target_weights_o
 
         losses["loss_giou"] = loss_giou.sum() / num_boxes
 

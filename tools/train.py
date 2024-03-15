@@ -108,7 +108,9 @@ def main_worker(cfg):
     elif cfg.finetune_from:
         load_pretrained_checkpoint(model, model_ema, cfg.finetune_from, amp=cfg.use_fp16)
     elif cfg.load_from:
-        load_checkpoint(model, model_ema, load_from=cfg.load_from)
+        start_epoch, best_d_acc, best_miou, flag = load_checkpoint(model, model_ema, load_from=cfg.load_from)
+        if not flag:
+            model_ema = ExponentialMovingAverage(model, cfg.ema_factor) if cfg.ema else None
 
     import time
 
@@ -199,6 +201,8 @@ def main():
         cfg.resume_from = args.resume_from
     if args.finetune_from is not None:
         cfg.finetune_from = args.finetune_from
+    if args.load_from is not None:
+        cfg.load_from = args.load_from
     cfg.launcher = args.launcher
     cfg.config = args.config
 

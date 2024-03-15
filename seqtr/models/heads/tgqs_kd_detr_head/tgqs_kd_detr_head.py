@@ -2,16 +2,18 @@ from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from copy import deepcopy
 
-from detrex.layers.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
+from detrex.layers.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh, box_iou
 from detrex.layers.mlp import MLP
 from detrex.modeling.criterion.criterion import SetCriterion
 from detrex.layers.position_embedding import PositionEmbeddingLearned, PositionEmbeddingSine
 from detrex.modeling.matcher.matcher import HungarianMatcher
 from detectron2.structures import Boxes, ImageList, Instances
-
+from seqtr.models.utils import freeze_params
 from .transformer import DetrTransformer, DetrTransformerEncoder, DetrTransformerDecoder
 from seqtr.models import HEADS
+from seqtr.core.criterion.distill_criterion import DistillCriterion
 
 
 @HEADS.register_module()
@@ -28,8 +30,15 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         num_decoder_layers=6,
         only_decoder=False,
         text_embed_aug=False,
-        target_type=["decoder_gt"],
-        branch_loss_weight={"decoder_gt": 1.0, "decoder_predict": 0.5, "token_gt": 0.5},
+        branch_loss_weight={},
+        as_target_query_thr=0.0,
+        distill_type="",  # "hard", "hard_weighted", "soft"
+        decoder_freeze=False,
+        prepare_target_mode="score_weighted",  # "score_weighted", "score_iou_weighted"
+        share_predicthead=False,
+        num_token_mlp_layers=3,
+        mlp_aux_loss=False,
+        aux_distill_mode = "klloss", # "klloss" "smoothl1loss"
     ):
         super(TextGuidedQuerySelectKDDETRHead, self).__init__()
         self.transformer = DetrTransformer(
@@ -54,14 +63,19 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             ),
             only_decoder=only_decoder,
         )
+        assert prepare_target_mode in ["score_weighted", "score_iou_weighted"]
+        assert distill_type in ["hard", "hard_weighted", "soft"]
         self.input_proj = nn.Conv2d(in_channels, embed_dim, kernel_size=1)
         self.input_text_proj = nn.Linear(in_channels, embed_dim)
         self.input_cls_proj = nn.Linear(in_channels, embed_dim)
         self.text_guided_query_generation_proj = nn.Linear(text_max_token, num_queries)
         self.num_queries = num_queries
         self.text_embed_aug = text_embed_aug
-        self.target_type = target_type
-        assert all(x in ["decoder_gt", "token_gt", "decoder_predict"] for x in target_type)
+        self.as_target_query_thr = as_target_query_thr
+        self.distill_type = distill_type
+        self.prepare_target_mode = prepare_target_mode
+        self.mlp_aux_loss = mlp_aux_loss
+        assert all(x in ["decoder", "token", "distill", "merge", "aux_distill"] for x in branch_loss_weight.keys())
         self.branch_loss_weight = branch_loss_weight
         # self.query_embed = nn.Embedding(num_queries, embed_dim)
         self.num_classes = num_classes
@@ -71,15 +85,22 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             temperature=10000,
             normalize=True,
         )
+        # mlp
+        self.mlp = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=embed_dim, num_layers=num_token_mlp_layers, return_intermediate=True)
 
         # define classification head and box head
-        self.class_embed_decoder = nn.Linear(embed_dim, num_classes + 1)
-        self.bbox_embed_decoder = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
+        if share_predicthead:
+            self.class_embed_decoder = nn.Linear(embed_dim, num_classes + 1)
+            self.bbox_embed_decoder = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
+            self.class_embed_token = self.class_embed_decoder
+            self.bbox_embed_token = self.bbox_embed_decoder
+        else:
+            self.class_embed_decoder = nn.Linear(embed_dim, num_classes + 1)
+            self.bbox_embed_decoder = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
+            self.class_embed_token = nn.Linear(embed_dim, num_classes + 1)
+            self.bbox_embed_token = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
 
-        self.class_embed_token = nn.Linear(embed_dim, num_classes + 1)
-        self.bbox_embed_token = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
-
-        matcher = HungarianMatcher(
+        self.matcher = HungarianMatcher(
             cost_class=1,
             cost_bbox=5.0,
             cost_giou=2.0,
@@ -87,7 +108,7 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         )
         self.criterion = SetCriterion(
             num_classes=num_classes,
-            matcher=matcher,
+            matcher=self.matcher,
             weight_dict={
                 "loss_class": 1,
                 "loss_bbox": 5.0,
@@ -97,17 +118,29 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             eos_coef=0.1,
         )
 
-        self.criterion_predict = SetCriterion(
-            num_classes=num_classes,
-            matcher=matcher,
-            weight_dict={
-                "loss_class": 1,
-                "loss_bbox": 5.0,
-                "loss_giou": 2.0,
-            },
-            loss_class_type="weighted_ce_loss",
-            eos_coef=0.1,
-        )
+        if "hard_weighted" in self.distill_type:
+            self.criterion_harddistill = SetCriterion(
+                num_classes=num_classes,
+                matcher=self.matcher,
+                weight_dict={
+                    "loss_class": 1.0,
+                    "loss_bbox": 5.0,
+                    "loss_giou": 2.0,
+                },
+                loss_class_type="weighted_ce_loss",
+                eos_coef=0.1,
+            )
+        elif "soft" in self.distill_type:
+            self.criterion_softdistill = DistillCriterion(num_classes=num_classes + 1)
+            
+        if "aux_distill" in self.branch_loss_weight:
+            self.aux_distill_mode = aux_distill_mode
+            if self.aux_distill_mode=="klloss":
+                self.aux_distill_loss = nn.KLDivLoss(reduction="batchmean")
+            elif self.aux_distill_mode=="smoothl1loss":
+                self.aux_distill_loss = nn.SmoothL1Loss(reduction="mean")
+            else:
+                raise TypeError("{} is not suppoert now!!!".format(self.aux_distill_mode))
 
         if self.aux_loss:
             weight_dict = self.criterion.weight_dict
@@ -116,6 +149,15 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
             weight_dict.update(aux_weight_dict)
             self.criterion.weight_dict = weight_dict
+
+        if decoder_freeze:
+            self.transformer.eval()
+            freeze_params(self.transformer)
+            freeze_params(self.input_proj)
+            freeze_params(self.text_guided_query_generation_proj)
+            freeze_params(self.input_text_proj)
+            freeze_params(self.class_embed_decoder)
+            freeze_params(self.box)
 
     def prepare_targets(self, targets, img_metas):
         new_targets = []
@@ -133,11 +175,15 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             new_targets.append({"labels": gt_classes, "boxes": gt_boxes})
         return new_targets
 
-    def prepare_soft_targets(self, targets, decoder_branch_output, img_metas, predict_threahold=0.0):
+    def prepare_soft_targets(self, targets, decoder_branch_output, img_metas, predict_threahold=0.0, prepare_target_mode="iou_weighted"):
         new_targets_pred = []
         new_targets_gt = []
         decoder_scores = F.softmax(decoder_branch_output["pred_logits"], dim=-1)[:, :, 0:1]
+        # decoder_scores = F.softmax(decoder_branch_output["pred_logits"], dim=-1)
         decoder_pred_boxes = decoder_branch_output["pred_boxes"]
+
+        decoder_scores = decoder_scores.detach()
+        decoder_pred_boxes = decoder_pred_boxes.detach()
 
         for target_bbox, img_meta in zip(targets, img_metas):
             h, w = img_meta["img_shape"][:2]
@@ -152,18 +198,85 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
             new_targets_gt.append({"labels": gt_classes, "boxes": gt_boxes})
 
-        for predict_bbox, predict_score, img_meta in zip(decoder_pred_boxes, decoder_scores, img_metas):
-            mask = predict_score.squeeze(-1) > predict_threahold
-            predict_weight = torch.zeros_like(predict_score)
-            predict_weight[mask] = predict_score[mask]
-            predict_bbox = predict_bbox[mask, :]
-            if sum(mask) == 0:
-                gt_classes = torch.tensor([], device=target_bbox.device).long()
-            else:
-                gt_classes = torch.zeros((predict_bbox.shape[0]), device=target_bbox.device).long()
-            new_targets_pred.append({"labels": gt_classes, "boxes": predict_bbox, "weight": predict_weight})
+        # use all predict
+        if prepare_target_mode == "score_weighted":
+            for predict_bbox, predict_score, img_meta in zip(decoder_pred_boxes, decoder_scores, img_metas):
+                mask = predict_score.squeeze(-1) > predict_threahold
+                predict_weight = torch.zeros_like(predict_score)
+                predict_weight[mask] = predict_score[mask]
+                predict_bbox = predict_bbox[mask, :]
+                if sum(mask) == 0:
+                    gt_classes = torch.tensor([], device=target_bbox.device).long()
+                else:
+                    gt_classes = torch.zeros((predict_bbox.shape[0]), device=target_bbox.device).long()
+                new_targets_pred.append({"labels": gt_classes, "boxes": predict_bbox, "weight": predict_weight})
+        elif prepare_target_mode == "score_iou_weighted":  # iou weighted distill
+            new_targets_gt_out = deepcopy(new_targets_gt)
+            decoder_pred_boxes = deepcopy(decoder_pred_boxes)
+            decoder_scores = deepcopy(decoder_scores)
+            indices = self.matcher(decoder_branch_output, new_targets_gt_out)
+            for indice, predict_bbox, predict_score, target_gt, img_meta in zip(indices, decoder_pred_boxes, decoder_scores, new_targets_gt_out, img_metas):
+                predict_bbox_ = predict_bbox[indice[0]]
+                target_gt_ = target_gt["boxes"][indice[1]]
+                target_gt_ = torch.cat([target_gt_], dim=0)
+                ious = torch.diag(box_iou(box_cxcywh_to_xyxy(predict_bbox_), box_cxcywh_to_xyxy(target_gt_))[0])
+                predict_score = predict_score[indice[0]]
+                predict_weight = predict_score * ious
+                if predict_weight.shape[0] == 0:
+                    gt_classes = torch.tensor([], device=target_bbox.device).long()
+                else:
+                    gt_classes = torch.zeros((predict_bbox_.shape[0]), device=target_bbox.device).long()
+                new_targets_pred.append({"labels": gt_classes, "boxes": predict_bbox_, "weight": predict_weight})
+        else:
+            raise TypeError("{} type is not support yet!! you can choose [score_weighted, iou_weighted] types!!!".format(target_type))
 
         return new_targets_gt, new_targets_pred
+
+    def prepare_merge_target(self, targets, decoder_branch_output, img_metas):
+        new_targets_merge = []
+        new_targets_gt = []
+        decoder_scores = F.softmax(decoder_branch_output["pred_logits"], dim=-1)[:, :, 0]
+        # decoder_scores = F.softmax(decoder_branch_output["pred_logits"], dim=-1)
+        decoder_pred_boxes = decoder_branch_output["pred_boxes"]
+
+        decoder_scores = decoder_scores.detach()
+        decoder_pred_boxes = decoder_pred_boxes.detach()
+
+        for target_bbox, img_meta in zip(targets, img_metas):
+            h, w = img_meta["img_shape"][:2]
+            image_size_xyxy = torch.as_tensor([w, h, w, h], dtype=torch.float, device=target_bbox.device)
+            if len(target_bbox.shape) == 1:
+                target_bbox = target_bbox.unsqueeze(0)
+                gt_classes = torch.zeros(1, device=target_bbox.device).long()
+            else:  # for grec
+                assert int(target_bbox.shape[0]) == len(img_meta["target"])
+                gt_classes = torch.tensor([1 if t["category_id"] == -1 else 0 for t in img_meta["target"]], device=target_bbox.device).long()
+            gt_boxes = target_bbox.float() / image_size_xyxy
+            gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
+            new_targets_gt.append({"labels": gt_classes, "boxes": gt_boxes})
+
+        new_targets_gt_out = deepcopy(new_targets_gt)
+        decoder_pred_boxes = deepcopy(decoder_pred_boxes)
+        decoder_scores = deepcopy(decoder_scores)
+        indices = self.matcher(decoder_branch_output, new_targets_gt_out)
+        for indice, predict_bbox, predict_score, target_gt, img_meta in zip(indices, decoder_pred_boxes, decoder_scores, new_targets_gt_out, img_metas):
+            predict_bbox_ = predict_bbox[indice[0]]
+            target_gt_boxes = target_gt["boxes"][indice[1]]
+            target_gt_labels = target_gt["labels"][indice[1]]
+            target_gt_boxes = torch.cat([target_gt_boxes], dim=0)
+            ious = torch.diag(box_iou(box_cxcywh_to_xyxy(predict_bbox_), box_cxcywh_to_xyxy(target_gt_boxes))[0])
+            predict_score_ = predict_score[indice[0]]
+            predict_weight = predict_score_ * ious
+            merged_labels = torch.cat((target_gt_labels, gt_classes), dim=0)
+            merged_bboxes = torch.cat((target_gt_boxes, predict_bbox_), dim=0)
+            merged_weights = torch.cat((torch.ones(target_gt_labels.shape[0], device=predict_weight.device), predict_weight), dim=0)
+            if predict_weight.shape[0] == 0:
+                gt_classes = torch.tensor([], device=target_bbox.device).long()
+            else:
+                gt_classes = torch.zeros((predict_bbox_.shape[0]), device=target_bbox.device).long()
+            new_targets_merge.append({"labels": merged_labels, "boxes": merged_bboxes, "weight": merged_weights})
+
+        return new_targets_gt, new_targets_merge
 
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
@@ -173,7 +286,10 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
 
     def x_mask_pos_enc(self, x, img_metas):
         batch_size = x.size(0)
-        input_img_h, input_img_w = img_metas[0]["batch_input_shape"]
+        try:
+            input_img_h, input_img_w = img_metas[0]["batch_input_shape"]
+        except:
+            input_img_h, input_img_w, _ = img_metas[0]["img_shape"]
         x_mask = x.new_ones((batch_size, input_img_h, input_img_w))
         # CAUTION: do not support random flipping
         for img_id in range(batch_size):
@@ -190,15 +306,35 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
 
         return x_mask, x_pos_embeds
 
-    def calc_loss(self, output_class, output_coord, targets, type_loss="gt"):
+    def calc_loss(self, output_class, output_coord, targets):
         output = {"pred_logits": output_class[-1], "pred_boxes": output_coord[-1]}
         if self.aux_loss:
             output["aux_outputs"] = self._set_aux_loss(output_class, output_coord)
 
-        if type_loss == "predict":
-            loss_dict = self.criterion_predict(output, targets)
-        else:
+        loss_dict = self.criterion(output, targets)
+        weight_dict = self.criterion.weight_dict
+        for k in loss_dict.keys():
+            if k in weight_dict:
+                loss_dict[k] *= weight_dict[k]
+        return loss_dict
+
+    def calc_distill_loss(self, all_cls_scores, all_bbox_preds, img_metas, teacher_bboxes, teacher_labels, targets=None, distill_type="soft"):
+        if distill_type == "soft":
+            teacher_bboxes = teacher_bboxes[-1:]
+            teacher_labels = teacher_labels[-1:]
+            loss_dict = self.criterion_softdistill.forward_train_distill(all_cls_scores, all_bbox_preds, img_metas, teacher_bboxes, teacher_labels)
+        elif distill_type == "hard_weighted":
+            output = {"pred_logits": all_cls_scores[-1], "pred_boxes": all_bbox_preds[-1]}
+            if self.aux_loss:
+                output["aux_outputs"] = self._set_aux_loss(all_cls_scores, all_bbox_preds)
+            loss_dict = self.criterion_harddistill(output, targets)
+        elif distill_type == "hard":
+            output = {"pred_logits": all_cls_scores[-1], "pred_boxes": all_bbox_preds[-1]}
+            if self.aux_loss:
+                output["aux_outputs"] = self._set_aux_loss(all_cls_scores, all_bbox_preds)
             loss_dict = self.criterion(output, targets)
+        else:
+            raise TypeError("The distill type is not correct!!!")
         weight_dict = self.criterion.weight_dict
         for k in loss_dict.keys():
             if k in weight_dict:
@@ -220,13 +356,15 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             cls_feat = cls_feat.repeat((1, self.num_queries, 1)) + query_embed
         else:
             cls_feat = cls_feat.repeat((1, self.num_queries, 1))
+            
+        cls_feat = self.mlp(cls_feat)
 
         # decoder
         hidden_states, _ = self.transformer(x_mm, img_masks, query_embed, pos_embed)
 
         # cls_feat branch
-        outputs_class_token_branch = self.class_embed_token(cls_feat).unsqueeze(0)
-        outputs_coord_token_branch = self.bbox_embed_token(cls_feat).sigmoid().unsqueeze(0)
+        outputs_class_token_branch = self.class_embed_token(cls_feat)
+        outputs_coord_token_branch = self.bbox_embed_token(cls_feat).sigmoid()
 
         outputs_class_decoder_branch = self.class_embed_decoder(hidden_states)
         outputs_coord_decoder_branch = self.bbox_embed_decoder(hidden_states).sigmoid()
@@ -246,6 +384,8 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             "outputs_coord_decoder_branch": outputs_coord_decoder_branch,
             "outputs_class_token_branch": outputs_class_token_branch,
             "outputs_coord_token_branch": outputs_coord_token_branch,
+            "token_features": cls_feat,
+            "decoder_features": hidden_states,
         }
 
         return output
@@ -260,63 +400,74 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         outputs_coord_token_branch = output["outputs_coord_token_branch"]
         token_branch_output = output["token_branch_output"]
         decoder_branch_output = output["decoder_branch_output"]
+        token_features = output["token_features"]
+        decoder_features = output["decoder_features"]
 
         # prepare the targets
-        targets_decoder_branch = self.prepare_targets(gt_bbox, img_metas)
-        targets_gt, targets_predict = self.prepare_soft_targets(gt_bbox, decoder_branch_output, img_metas)
-
-        loss_decoder_branch, loss_token_branch_gt, loss_token_branch_predict = (
-            torch.tensor(0, device=device),
-            torch.tensor(0, device=device),
-            torch.tensor(0, device=device),
+        # targets_decoder_branch = self.prepare_targets(gt_bbox, img_metas)
+        targets_gt, targets_predict = self.prepare_soft_targets(
+            gt_bbox, decoder_branch_output, img_metas, predict_threahold=self.as_target_query_thr, prepare_target_mode=self.prepare_target_mode
         )
-        if "decoder_gt" in self.target_type:
-            loss_dict_decoder_branch = self.calc_loss(outputs_class_decoder_branch, outputs_coord_decoder_branch, targets_decoder_branch)
-            loss_decoder_branch = sum(loss_dict_decoder_branch.values())
-        if "token_gt" in self.target_type:
-            loss_dict_token_branch_gt = self.calc_loss(outputs_class_token_branch, outputs_coord_token_branch, targets_gt)
-            loss_token_branch_gt = sum(loss_dict_token_branch_gt.values())
-        if "decoder_predict" in self.target_type:
-            loss_dict_token_branch_predict = self.calc_loss(outputs_class_token_branch, outputs_coord_token_branch, targets_predict, type_loss="predict")
-            loss_token_branch_predict = sum(loss_dict_token_branch_predict.values())
+
+        loss_decoder_branch, loss_token_branch, loss_kd_branch, loss_merge_branch, loss_aux_distill_branch = (
+            torch.tensor(0, device=device).float(),
+            torch.tensor(0, device=device).float(),
+            torch.tensor(0, device=device).float(),
+            torch.tensor(0, device=device).float(),
+            torch.tensor(0, device=device).float(),
+        )
         loss_dict = {}
-        loss_dict["loss_det"] = (
-            self.branch_loss_weight["decoder_gt"] * loss_decoder_branch
-            + self.branch_loss_weight["token_gt"] * loss_token_branch_gt
-            + self.branch_loss_weight["decoder_predict"] * loss_token_branch_predict
-        )
+        if "decoder" in self.branch_loss_weight:
+            loss_dict_decoder_branch = self.calc_loss(outputs_class_decoder_branch, outputs_coord_decoder_branch, targets_gt)
+            loss_decoder_branch = sum(loss_dict_decoder_branch.values())
+            loss_decoder_branch = self.branch_loss_weight["decoder"] * loss_decoder_branch
+            loss_dict["loss_dgt"] = loss_decoder_branch
+        if "token" in self.branch_loss_weight:
+            # if mlp_aux_loss is False, select the last mlp output as the input of the loss
+            if not self.mlp_aux_loss:
+                outputs_class_token_branch = outputs_class_token_branch[-1:]
+                outputs_coord_token_branch = outputs_coord_token_branch[-1:]
+            loss_dict_token_branch_gt = self.calc_loss(outputs_class_token_branch, outputs_coord_token_branch, targets_gt)
+            loss_token_branch = sum(loss_dict_token_branch_gt.values())
+            loss_token_branch = self.branch_loss_weight["token"] * loss_token_branch
+            loss_dict["loss_tgt"] = loss_token_branch
+        if "distill" in self.branch_loss_weight:
+            # if mlp_aux_loss is False, select the last mlp output as the input of the loss
+            if not self.mlp_aux_loss:
+                outputs_class_token_branch = outputs_class_token_branch[-1:]
+                outputs_coord_token_branch = outputs_coord_token_branch[-1:]
+            loss_dict_token_branch_predict = self.calc_distill_loss(
+                outputs_class_token_branch,
+                outputs_coord_token_branch,
+                img_metas,
+                outputs_coord_decoder_branch,
+                outputs_class_decoder_branch,
+                targets=targets_predict,
+                distill_type=self.distill_type,
+            )
+            loss_kd_branch = sum(loss_dict_token_branch_predict.values())
+            loss_kd_branch = self.branch_loss_weight["distill"] * loss_kd_branch
+            loss_dict["loss_kd"] = loss_kd_branch
+        if "merge" in self.branch_loss_weight:
+            targets_gt, targets_merge = self.prepare_merge_target(gt_bbox, decoder_branch_output, img_metas)
+            loss_dict_merge_branch_gt = self.calc_loss(outputs_class_token_branch, outputs_coord_token_branch, targets_merge)
+            loss_merge_branch = sum(loss_dict_merge_branch_gt.values())
+            loss_merge_branch = self.branch_loss_weight["merge"] * loss_merge_branch
+            loss_dict["loss_merge"] = loss_merge_branch
+        if "aux_distill" in self.branch_loss_weight:
+            assert token_features.shape == decoder_features.shape, "the number of the mlp layers and ecoder layers must be the same!!"
+            decoder_features_detached = decoder_features.detach()
+            feat_dim = token_features.shape[-1]
+            for token_feat, decoder_feat in zip(token_features, decoder_features_detached):
+                if self.aux_distill_mode=="klloss":
+                    loss_aux_distill_branch += self.aux_distill_loss(F.log_softmax(token_feat.reshape(-1,feat_dim), dim=-1), F.softmax(decoder_feat.reshape(-1, feat_dim), dim=-1))
+                elif self.aux_distill_mode=="smoothl1loss":
+                    loss_aux_distill_branch += self.aux_distill_loss(token_feat, decoder_feat)
+            loss_aux_distill_branch = self.branch_loss_weight["aux_distill"] * loss_aux_distill_branch
+            loss_dict["aux_distill"] = loss_aux_distill_branch
+
+        loss_dict["loss_total"] = loss_decoder_branch + loss_token_branch + loss_kd_branch + loss_merge_branch + loss_aux_distill_branch
         return loss_dict, output
-
-        # proj_queries = F.normalize(self.contrastive_align_projection_image(logits), p=2, dim=-1)
-        # proj_tokens = F.normalize(
-        #     self.contrastive_align_projection_text(memory_cache["text_memory"]).transpose(0, 1),
-        #     p=2,
-        #     dim=-1,
-        # )
-        # out.update(
-        #     {
-        #         "proj_queries": proj_queries[-1],
-        #         "proj_tokens": proj_tokens,
-        #         "tokenized": memory_cache["tokenized"],
-        #     }
-        # )
-        # assert proj_tokens is not None and proj_queries is not None
-        # out["aux_outputs"] = [
-        #     {
-        #         "pred_logits": a,
-        #         "pred_boxes": b,
-        #         "proj_queries": c,
-        #         "proj_tokens": proj_tokens,
-        #         "tokenized": memory_cache["tokenized"],
-        #     }
-        #     for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], proj_queries[:-1])
-        # ]
-
-        # loss_dict = {}
-        # if self.criterion is not None:
-        #     loss_dict.update(self.criterion(out, targets, positive_map))
-
-        # loss_ce = self.loss(logits, targets, with_bbox=with_bbox, with_mask=with_mask)
 
     def forward_test(self, x_mm, img_metas, text_feat=None, cls_feat=None, with_bbox=False, with_mask=False):
         return self.forward_general(x_mm, img_metas, text_feat=text_feat, cls_feat=cls_feat)

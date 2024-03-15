@@ -78,6 +78,12 @@ class BEIT3(BEiT3Wrapper):
 
     def _freeze_stages(self):
         if self.frozen_stages >= 0:
+            self.beit3.text_embed.eval()
+            self.beit3.vision_embed.eval()
+            for param in self.beit3.text_embed.parameters():
+                param.requires_grad = False
+            for param in self.beit3.vision_embed.parameters():
+                param.requires_grad = False
             for i in range(1, self.frozen_stages + 1):
                 m = self.beit3.encoder.layers[i - 1]
                 m.eval()

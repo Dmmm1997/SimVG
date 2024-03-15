@@ -32,7 +32,7 @@ class MLP(nn.Module):
     """
 
     def __init__(
-        self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int
+        self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, return_intermediate=False,
     ) -> torch.Tensor:
         super().__init__()
         self.num_layers = num_layers
@@ -40,6 +40,7 @@ class MLP(nn.Module):
         self.layers = nn.ModuleList(
             nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
         )
+        self.return_intermediate = return_intermediate
 
     def forward(self, x):
         """Forward function of `MLP`.
@@ -50,8 +51,12 @@ class MLP(nn.Module):
         Returns:
             torch.Tensor: the forward results of `MLP` layer
         """
+        intermediate_res = []
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            intermediate_res.append(x)
+        if self.return_intermediate:
+            return torch.stack(intermediate_res,dim=0)
         return x
 
 

@@ -69,7 +69,7 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
 
         losses, predictions = model(**inputs, rescale=False)
 
-        loss_det = losses.pop("loss_det", torch.tensor([0.0], device=device))
+        loss_det = losses.get("loss_total", torch.tensor([0.0], device=device))
         loss_mask = losses.pop("loss_mask", torch.tensor([0.0], device=device))
         loss = loss_det + loss_mask
         optimizer.zero_grad()
@@ -85,14 +85,21 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
         if cfg.ema:
             model_ema.update_params()
 
-        if cfg.distributed:
-            loss_det = reduce_mean(loss_det)
-            loss_mask = reduce_mean(loss_mask)
+        # if cfg.distributed:
+        #     loss_det = reduce_mean(loss_det)
+        #     loss_mask = reduce_mean(loss_mask)
 
         if not isinstance(predictions, list):
             predictions_list = [predictions]
         else:
             predictions_list = predictions
+            
+        # statistics loss
+        for loss_name, loss_value in losses.items():
+            if cfg.distributed:
+                loss_value = reduce_mean(loss_value)
+            loss_det_list[loss_name].append(loss_value.item())
+        
 
         # statistics informations
         map_dict = {0: "decoder", 1: "token"}
@@ -114,7 +121,7 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
                     if cfg.distributed:
                         batch_det_acc = reduce_mean(batch_det_acc)
                 det_acc_list[predict_type].append(batch_det_acc.item())
-                loss_det_list[predict_type].append(loss_det.item())
+                # loss_det_list[predict_type].append(loss_det.item())
                 det_acc = sum(det_acc_list[predict_type]) / len(det_acc_list[predict_type])
                 det_acc_dict[predict_type] = det_acc
             else:
@@ -126,7 +133,7 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
                         batch_n_acc = reduce_mean(batch_n_acc)
                 f1_score_list[predict_type].append(batch_f1_score.item())
                 n_acc_list[predict_type].append(batch_n_acc.item())
-                loss_det_list[predict_type].append(loss_det.item())
+                # loss_det_list[predict_type].append(loss_det.item())
                 f1_score_acc = sum(f1_score_list[predict_type]) / len(f1_score_list[predict_type])
                 n_acc = sum(n_acc_list[predict_type]) / len(n_acc_list[predict_type])
                 f1_score_acc_dict[predict_type] = f1_score_acc
@@ -134,30 +141,34 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
 
         # logging informations
         if is_main() and ((batch + 1) % cfg.log_interval == 0 or batch + 1 == batches):
+            loss_str_list = ["{}:{:.3f}".format(loss_n.split("loss_")[-1], sum(loss_v)/len(loss_v)) for loss_n, loss_v in loss_det_list.items()]
+            loss_str =  "loss:["+" ".join(loss_str_list) +"]"
             logger = get_root_logger()
             if not cfg["dataset"] == "GRefCOCO":
-                ACC_str_list = ["{}Det@.5: {:.2f}, ".format(map_dict[i], det_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
+                ACC_str_list = ["{}Acc:{:.2f}, ".format(map_dict[i], det_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
                 ACC_str = "".join(ACC_str_list)
                 logger.info(
-                    f"train - epoch [{epoch+1}]-[{batch+1}/{batches}] "
-                    + f"time: {(time.time()- end):.2f}, data_time: {data_time:.2f}, "
-                    + f"loss_det: {sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
-                    + f"lr: {optimizer.param_groups[0]['lr']:.6f}, "
+                    f"train-epoch[{epoch+1}]-[{batch+1}/{batches}] "
+                    + f"time:{(time.time()- end):.2f}, data_time: {data_time:.2f}, "
+                    # + f"loss_det:{sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
+                    + f"{loss_str}, "
+                    + f"lr:{optimizer.param_groups[0]['lr']:.6f}, "
                     # + f"DetACC@0.5: {det_acc:.2f}, "
                     + ACC_str
                 )
             else:
                 F1_Score_str_list = [
-                    "{}_f1_score: {:.2f}, ".format(map_dict[i], f1_score_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
+                    "{}_f1: {:.2f}, ".format(map_dict[i], f1_score_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
                 ]
-                n_acc_str_list = ["{}_n_acc: {:.2f}, ".format(map_dict[i], n_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
+                n_acc_str_list = ["{}_Nacc: {:.2f}, ".format(map_dict[i], n_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
                 F1_Score_str = "".join(F1_Score_str_list)
                 n_acc_str = "".join(n_acc_str_list)
                 logger.info(
-                    f"train - epoch [{epoch+1}]-[{batch+1}/{batches}] "
-                    + f"time: {(time.time()- end):.2f}, data_time: {data_time:.2f}, "
-                    + f"loss_det: {sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
-                    + f"lr: {optimizer.param_groups[0]['lr']:.6f}, "
+                    f"train-epoch[{epoch+1}]-[{batch+1}/{batches}] "
+                    + f"time:{(time.time()- end):.2f}, data_time: {data_time:.2f}, "
+                    # + f"loss_det:{sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
+                    +f"{loss_str}, "
+                    + f"lr:{optimizer.param_groups[0]['lr']:.6f}, "
                     + F1_Score_str
                     + n_acc_str
                 )

@@ -10,9 +10,10 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "1" },
       "args": [
-        "configs/beit3/detection/multibranch/beit3_tgqshead_predict_as_gt_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
+        "configs/beit3/detection/distill/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif.py",
         // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
-        // "--work-dir", "work_dir/debug/test"
+        "--work-dir", "work_dir/debug/test",
+        // "--load-from", "work_dir/beit3_multibranch/(3-9)decodergt#0decoderpredict#0tokengt_30ep_noweight/20240310_095533/det_best.pth"
       ]
     },
     {
@@ -23,9 +24,9 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/20240302_172934_grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100.py",
+        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/20240314_165033_(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif.py",
         "--load-from",
-        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/latest.pth"
+        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/det_best.pth"
       ]
     },
     {
@@ -36,8 +37,8 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/20240302_172934_grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100.py",
-        "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/latest.pth",
+        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif/20240314_150703/20240314_150703_(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif.py",
+        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif/20240314_150703/det_best.pth",
         "--output-dir",
         "visualization/inference"
       ]
@@ -52,6 +53,30 @@
       "args": [
         "configs/beit3/detection/diff_head/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq1.py"
       ]
+    },
+    {
+      "name": "gradcam",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/misc/vis_cam.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+    },
+    {
+      "name": "gradcam_2",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/misc/heatmap.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+    },
+    {
+      "name": "demo",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/demo.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
     }
   ]
 }
