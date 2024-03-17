@@ -192,11 +192,11 @@ def main():
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
     if args.work_dir is not None:
-        cfg.work_dir = osp.join(args.work_dir, f"{cfg.timestamp}")
+        cfg.work_dir = args.work_dir
     elif cfg.get("work_dir", None) is None:
-        cfg.work_dir = f"./work_dir/{cfg.timestamp}_" + osp.splitext(osp.basename(args.config))[0]
-    else:
-        cfg.work_dir = osp.join(cfg.work_dir, f"{cfg.timestamp}")
+        # cfg.work_dir = f"./work_dir/{cfg.timestamp}_" + osp.splitext(osp.basename(args.config))[0]
+        cfg.work_dir = f"./work_dir/"+args.config.split("configs/")[-1].split(".py")[0]
+    cfg.work_dir = osp.join(cfg.work_dir, f"{cfg.timestamp}")
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     if args.finetune_from is not None:
