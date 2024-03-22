@@ -52,7 +52,7 @@ class MIXDETRMB(OneStageModel):
         img_feat = img_feat.transpose(-1, -2).reshape(B, -1, H // self.patch_size, W // self.patch_size)
 
         losses_dict, output = self.head.forward_train(
-            img_feat, img_metas, cls_feat=cls_feat, gt_bbox=gt_bbox, text_feat=text_feat, gt_mask_vertices=gt_mask_vertices
+            img_feat, img_metas, cls_feat=cls_feat, gt_bbox=gt_bbox, text_feat=text_feat, text_mask=text_attention_mask
         )
 
         output_token_branch = output["token_branch_output"]
@@ -103,7 +103,7 @@ class MIXDETRMB(OneStageModel):
         img_feat, text_feat, cls_feat = self.extract_visual_language(img, ref_expr_inds, text_attention_mask)
         img_feat = img_feat.transpose(-1, -2).reshape(B, -1, H // self.patch_size, W // self.patch_size)
 
-        output = self.head.forward_test(img_feat, img_metas, text_feat=text_feat, cls_feat = cls_feat,  with_bbox=with_bbox, with_mask=with_mask)
+        output = self.head.forward_test(img_feat, img_metas, text_feat=text_feat, cls_feat = cls_feat,  with_bbox=with_bbox, with_mask=with_mask, text_mask=text_attention_mask)
 
         output_token_branch = output["token_branch_output"]
         output_decoder_branch = output["decoder_branch_output"] 

@@ -29,7 +29,8 @@ class GradCAM_BeiT(object):
         self._register_hook()
 
     def _get_features_hook(self, module, input, output):
-        output = output[0][:, 1 : -20].transpose(-1,-2).reshape(1, -1, 16, 16)
+        # output = output[0][:, 1 : -20].transpose(-1,-2).reshape(1, -1, 16, 16)
+        output = output.reshape(1,-1,16,16)
         self.feature = output
         
         # print("feature shape:{}".format(output.size()))
@@ -42,7 +43,8 @@ class GradCAM_BeiT(object):
         :param output_grad:tuple
         :return:
         """
-        output_grad = output_grad[0][:, 1 : -20].transpose(-1,-2).reshape(1, -1, 16, 16)
+        # output_grad = output_grad[0][:, 1 : -20].transpose(-1,-2).reshape(1, -1, 16, 16)
+        output_grad = output_grad[0].reshape(1,-1,16,16)
         self.gradient = output_grad
         
 
@@ -129,8 +131,8 @@ class GradCAM_BeiT(object):
         output_decoder_branch_logits = output["decoder_branch_output"]["pred_logits"]
         output_decoder_branch_boxes = output["decoder_branch_output"]["pred_boxes"]
         
-        score = output_token_branch_logits[0][index][0]
-        bbox = output_token_branch_boxes[0][index][1]
+        score = output_decoder_branch_logits[0][index][0]
+        bbox = output_decoder_branch_boxes[0][index][0]
         bbox.backward()
 
         gradient = self.gradient[0] # [C,H,W]
@@ -150,7 +152,7 @@ class GradCAM_BeiT(object):
         
         predictions_token_branch = self.net.get_predictions(output["token_branch_output"], img_metas, rescale=True)
         predictions_decoder_branch = self.net.get_predictions(output["decoder_branch_output"], img_metas, rescale=True)
-        box = predictions_token_branch["pred_bboxes"][index].cpu().detach().numpy().astype(np.int32)
+        box = predictions_decoder_branch["pred_bboxes"][index].cpu().detach().numpy().astype(np.int32)
         
         class_id = 0
         return cam.cpu().detach().numpy(), box, class_id, score.cpu().detach().numpy()

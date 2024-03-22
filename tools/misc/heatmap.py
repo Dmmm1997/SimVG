@@ -130,12 +130,12 @@ def main(args):
     model.CLASSES = label_names
     COLORS = np.random.uniform(0, 255, size=(len(label_names), 3))
 
-    grad_cam = GradCAM_BeiT(model, 'vis_enc.beit3.encoder.layers.6')
+    grad_cam = GradCAM_BeiT(model, 'head.transformer.decoder.layers.2')
 
     image = cv2.imread(args.image_path)
     data = prepare_img(cfg, args.image_path, text)
 
-    ## First is the data, second is the index of the predicted bbox
+    # First is the data, second is the index of the predicted bbox
     mask, box, class_id, score = grad_cam(**data)
 
     COLORS = np.random.uniform(0, 255, size=(len(label_names), 3))
@@ -153,11 +153,11 @@ def parse_args():
     # general
     parser.add_argument('--config',
                         type=str,
-                        default = 'work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/20240314_165033_(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif.py',
+                        default = 'work_dir/paper_exp/decoder_ablation_ep40/ViTBaseP32-1.0decoder-40ep-512hw-refcocounc/20240316_004218/20240316_004218_ViTBaseP32-1.0decoder-40ep-512hw-refcocounc.py',
                         help='RetinaNet configuration.')
     parser.add_argument('--checkpoint',
                         type=str,
-                        default = 'work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/det_best.pth',
+                        default = 'work_dir/paper_exp/decoder_ablation_ep40/ViTBaseP32-1.0decoder-40ep-512hw-refcocounc/20240316_004218/det_best.pth',
                         help='checkpoint.')
     parser.add_argument('--device',
                         type=str,

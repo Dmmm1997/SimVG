@@ -10,6 +10,7 @@ from seqtr.utils import (get_root_logger, load_checkpoint, init_dist,
 from mmcv.runner import get_dist_info
 from mmcv.utils import Config, DictAction
 from mmcv.parallel import MMDistributedDataParallel
+import os
 try:
     import apex
 except:
@@ -23,6 +24,7 @@ def main_worker(cfg):
         init_dist()
     cfg.rank, cfg.world_size = get_dist_info()
     if is_main():
+        logger = get_root_logger(log_file=os.path.join(os.path.dirname(cfg.load_from),"test_log.txt"))
         logger = get_root_logger()
         logger.info(cfg.pretty_text)
 

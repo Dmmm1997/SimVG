@@ -60,12 +60,12 @@ class BEIT3(BEiT3Wrapper):
 
         super(BEIT3, self).__init__(args=args)
         embed_dim = args.encoder_embed_dim
-        self.pooler = Pooler(
-            input_features=embed_dim,
-            output_features=embed_dim,
-            norm_layer=norm_layer,
-        )
-        self.pooler.apply(self._init_weights)
+        # self.pooler = Pooler(
+        #     input_features=embed_dim,
+        #     output_features=embed_dim,
+        #     norm_layer=norm_layer,
+        # )
+        # self.pooler.apply(self._init_weights)
         self.hidden_size = embed_dim
         self.vision_embed_proj_interpolate = vision_embed_proj_interpolate
         # load pretrain checkpoint
@@ -181,6 +181,6 @@ class BEIT3(BEiT3Wrapper):
             text_padding_position=padding_mask,
         )
         x = outputs["encoder_out"]
-        img_feat, text_feat = x[:, 1 : -question.shape[-1]], x[:, -question.shape[-1] :]
-        cls_rep = self.pooler(x)
-        return img_feat, text_feat, cls_rep
+        cls_feat, img_feat, text_feat = x[:, 0], x[:, 1 : -question.shape[-1]], x[:, -question.shape[-1] :]
+        # cls_rep = self.pooler(x)
+        return img_feat, text_feat, cls_feat
