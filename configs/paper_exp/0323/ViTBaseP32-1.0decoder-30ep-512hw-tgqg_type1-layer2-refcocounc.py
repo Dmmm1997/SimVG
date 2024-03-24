@@ -1,6 +1,6 @@
 _base_ = [
-    "../../../_base_/datasets/detection/refcoco-unc.py",
-    "../../../_base_/misc.py",
+    "../../_base_/datasets/detection/refcoco-unc.py",
+    "../../_base_/misc.py",
 ]
 dataset= "RefCOCOUNC"
 max_token = 20
@@ -93,13 +93,15 @@ model = dict(
         num_decoder_layers=3,
         only_decoder=True,
         text_embed_aug=False,
-        branch_loss_weight={"decoder":1.0, "merge":0.2},
-        distill_type="hard", # "hard", "hard_weighted", "soft"
-        prepare_target_mode="score_weighted", # "score_weighted", "score_iou_weighted"
+        branch_loss_weight={"decoder": 1.0},
+        distill_type="hard_weighted", # "hard", "hard_weighted", "soft"
+        prepare_target_mode="score_iou_weighted", # "score_weighted", "score_iou_weighted"
         share_predicthead=False,
         num_token_mlp_layers=1,
         mlp_aux_loss=False,
-        text_guided_query_generation=False
+        text_guided_query_generation=True,
+        tgqg_type=1,
+        num_tgqg_layers=2,
     ),
 )
 
@@ -107,7 +109,7 @@ grad_norm_clip = 0.15
 use_fp16 = False
 ema = False
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
-# work_dir = "work_dir/paper_exp/token_ablation/ViTBaseP32-1.0token-40ep-512hw-refcocounc"
+# work_dir = "work_dir/paper_exp/decoder_ablation/ViTBaseP32-1.0decoder-40ep-512hw-refcocounc"
 
 lr = 0.0005
 optimizer_config = dict(
@@ -124,12 +126,9 @@ optimizer_config = dict(
 scheduler_config = dict(
     type="MultiStepLRWarmUp",
     warmup_epochs=3,
-    decay_steps=[15],
+    decay_steps=[21, 27],
     decay_ratio=0.1,
-    max_epoch=20,
+    max_epoch=30,
 )
 
-
 log_interval = 50
-
-load_from = "work_dir/paper_exp/decoder_ablation/layers/ViTBaseP32-1.0decoder-30ep-512hw-3layer-refcocounc/20240317_032306/det_best.pth"

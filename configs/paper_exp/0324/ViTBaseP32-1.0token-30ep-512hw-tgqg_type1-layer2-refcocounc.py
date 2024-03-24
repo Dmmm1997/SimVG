@@ -93,13 +93,14 @@ model = dict(
         num_decoder_layers=3,
         only_decoder=True,
         text_embed_aug=False,
-        branch_loss_weight={"decoder": 1.0, "merge":1.0},
-        distill_type="hard", # "hard", "hard_weighted", "soft"
+        branch_loss_weight={"token": 1.0},
+        distill_type="hard_weighted", # "hard", "hard_weighted", "soft"
         prepare_target_mode="score_iou_weighted", # "score_weighted", "score_iou_weighted"
         share_predicthead=False,
         num_token_mlp_layers=1,
         mlp_aux_loss=False,
-        text_guided_query_generation=False
+        text_guided_query_generation=True,
+        num_tgqg_layers=2,
     ),
 )
 
@@ -130,5 +131,3 @@ scheduler_config = dict(
 )
 
 log_interval = 50
-
-load_from = "work_dir/paper_exp/decoder_ablation/ViTBaseP32-1.0decoder-30ep-512hw-3layer-refcocounc/20240317_032306/latest.pth"

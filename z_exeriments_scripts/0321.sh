@@ -20,7 +20,7 @@
 # done
 
 
-source_dir=configs/paper_exp/0322
+source_dir=configs/paper_exp/0324
 file_names=$(ls $source_dir)
 for file_name in $file_names
 do
@@ -40,3 +40,5 @@ do
   python tools/test.py $related_filename --load-from $checkpoint
   # test -----
 done
+
+

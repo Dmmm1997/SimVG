@@ -28,6 +28,7 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         aux_loss=True,
         num_encoder_layers=6,
         num_decoder_layers=6,
+        num_tgqg_layers=1,
         only_decoder=False,
         text_embed_aug=False,
         branch_loss_weight={},
@@ -117,12 +118,22 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 embed_dim=embed_dim,
                 num_heads=8,
                 attn_dropout=0.1,
-                feedforward_dim=512,
+                feedforward_dim=2048,
                 ffn_dropout=0.1,
-                num_layers=3,
+                num_layers=num_tgqg_layers,
                 return_intermediate=False,
                 post_norm=True,
             )
+        
+        # self.text_guided_query_generation_transformer = DetrTransformerEncoder(
+        #         embed_dim=embed_dim,
+        #         num_heads=8,
+        #         attn_dropout=0.1,
+        #         feedforward_dim=2048,
+        #         ffn_dropout=0.1,
+        #         num_layers=1,
+        #         post_norm=False,
+        #     )
         
         self.matcher = HungarianMatcher(
             cost_class=1,
@@ -380,20 +391,41 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             # query_embed = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], text_feat, ~text_mask))).unsqueeze(1)
             # assert cls_feat.shape==query_embed.shape
             # cls_feat = query_embed + cls_feat
+            
             # transformer based type2
-            token_feat_input = cls_feat.transpose(0,1)
-            target = torch.zeros_like(token_feat_input)
+            # token_feat_input = cls_feat.transpose(0,1)
+            text_feat_filter = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], text_feat, ~text_mask))).unsqueeze(1).repeat(1,self.num_queries,1)
+            query_embed = self.query_embed.weight.unsqueeze(0).repeat(x_mm.shape[0],1,1).transpose(0,1)
+            target = torch.zeros_like(query_embed)
             text_pos_embed = self.position_embedding_1d(text_feat).unsqueeze(0).repeat(text_feat.shape[0],1,1).permute(1,0,2).cuda()
             text_feat_input = text_feat.transpose(0,1)
-            cls_feat = self.text_guided_query_generation_transformer(
+            query_embed = self.text_guided_query_generation_transformer(
                 query=target,
                 key=text_feat_input,
                 value=text_feat_input,
                 key_pos=text_pos_embed,
-                query_pos=token_feat_input,
+                query_pos=query_embed,
                 key_padding_mask=text_mask.bool())
-            cls_feat = cls_feat[0].transpose(0,1)
-            query_embed = cls_feat
+            query_embed = query_embed[0].transpose(0,1) + text_feat_filter
+            cls_feat = query_embed + cls_feat
+                
+            ## type 3
+            # query_embed = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], text_feat, ~text_mask))).unsqueeze(1).repeat(1,self.num_queries,1)
+            # query_embed = self.query_embed.weight.unsqueeze(0).repeat(x_mm.shape[0],1,1)
+            # target = torch.zeros_like(query_embed)
+            # pos_embed_input = pos_embed.view(x_mm.shape[0], x_mm.shape[1], -1).permute(2, 0, 1)
+            # image_feat_input = x_mm.view(x_mm.shape[0], x_mm.shape[1], -1)
+            # img_masks_input = img_masks.view(img_masks.shape[0], -1)
+            # token_feat_input = self.text_guided_query_generation_transformer(
+            #     query=target.transpose(0,1),
+            #     key=image_feat_input.permute(2,0,1),
+            #     value=image_feat_input.permute(2,0,1),
+            #     key_pos=pos_embed_input,
+            #     query_pos=query_embed.transpose(0,1),
+                
+            #     key_padding_mask=img_masks_input)[0].transpose(0,1)
+            # query_embed = token_feat_input
+            # cls_feat = token_feat_input
         else:
             query_embed = self.query_embed.weight.unsqueeze(0).repeat(x_mm.shape[0],1,1)
             # query_embed = self.query_embed.weight

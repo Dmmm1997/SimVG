@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "1" },
       "args": [
-        "configs/paper_exp/tgqg/ViTBaseP32-1.0decoder-30ep-512hw-tgqg-refcocounc.py",
+        "configs/paper_exp/0323/ViTBaseP32-1.0decoder-30ep-512hw-tgqg3-refcocounc.py",
         // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
         "--work-dir",
         "work_dir/debug/test"
