@@ -82,7 +82,7 @@ class LoadImageAnnotationsFromFile(object):
             )
             self.corpus = torch.load(corpus_path)
         elif use_token_type == "beit3":
-            self.tokenizer = XLMRobertaTokenizer("/home/dmmm/demo_mirror/vlm/unilm/beit3/pretrain_weights/beit3.spm")
+            self.tokenizer = XLMRobertaTokenizer("pretrain_weights/beit3.spm")
             self.bos_token_id = self.tokenizer.bos_token_id
             self.eos_token_id = self.tokenizer.eos_token_id
             self.pad_token_id = self.tokenizer.pad_token_id

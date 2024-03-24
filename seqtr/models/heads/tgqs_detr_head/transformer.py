@@ -16,8 +16,8 @@
 import torch
 import torch.nn as nn
 
-from detrex.layers import FFN, BaseTransformerLayer, MultiheadAttention, TransformerLayerSequence
-
+# from detrex.layers import FFN, BaseTransformerLayer, MultiheadAttention, TransformerLayerSequence
+from .utils import FFN, BaseTransformerLayer, MultiheadAttention, TransformerLayerSequence
 
 class DetrTransformerEncoder(TransformerLayerSequence):
     def __init__(

@@ -50,7 +50,7 @@ test_pipeline = val_pipeline.copy()
 
 data = dict(
     samples_per_gpu=32,
-    workers_per_gpu=2,
+    workers_per_gpu=4,
     train=dict(
         pipeline=train_pipeline,
     ),
@@ -93,13 +93,12 @@ model = dict(
         num_decoder_layers=3,
         only_decoder=True,
         text_embed_aug=False,
-        branch_loss_weight={"decoder":1.0, "token": 1.0, "aux_distill":1.0},
+        branch_loss_weight={"decoder": 1.0, "token": 1.0},
         distill_type="hard_weighted", # "hard", "hard_weighted", "soft"
         prepare_target_mode="score_iou_weighted", # "score_weighted", "score_iou_weighted"
         share_predicthead=False,
         num_token_mlp_layers=3,
         mlp_aux_loss=False,
-        aux_distill_mode="klloss"
     ),
 )
 
@@ -107,7 +106,7 @@ grad_norm_clip = 0.15
 use_fp16 = False
 ema = False
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
-work_dir = "work_dir/beit3_multibranch_(3-14)/(3-15)noema#1.0token#1.0decoder#1.0auxdistill"
+work_dir = "work_dir/test"
 
 lr = 0.0003
 optimizer_config = dict(

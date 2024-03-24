@@ -1,7 +1,20 @@
-apex
-mmdet
-mmcv-full
+# apex
+mmdet==2.28.1
+# mmcv-full==1.7.2
 pydantic
 pycocotools; platform_system == "Linux"
 torch
 numpy
+ninja
+transformers
+wandb
+timm
+fairscale
+einops
+torchscale
+torchmetrics
+SentencePiece
+fvcore
+cloudpickle
+omegaconf
+# https://github.com/facebookresearch/detectron2.git

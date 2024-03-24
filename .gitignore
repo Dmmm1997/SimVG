@@ -7,3 +7,5 @@ work_dir/
 pretrain_weights/
 visualization/
 visualize/
+detectron2/
+detrex/

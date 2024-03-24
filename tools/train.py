@@ -104,7 +104,9 @@ def main_worker(cfg):
     model_ema = ExponentialMovingAverage(model, cfg.ema_factor) if cfg.ema else None
     start_epoch, best_d_acc, best_miou = -1, 0.0, 0.0
     if cfg.resume_from:
-        start_epoch, _, _ = load_checkpoint(model, model_ema, cfg.resume_from, amp=cfg.use_fp16, optimizer=optimizer, scheduler=scheduler)
+        start_epoch, _, _, flag = load_checkpoint(model, model_ema, cfg.resume_from, amp=cfg.use_fp16, optimizer=optimizer, scheduler=scheduler)
+        if not flag:
+            model_ema = ExponentialMovingAverage(model, cfg.ema_factor) if cfg.ema else None
     elif cfg.finetune_from:
         load_pretrained_checkpoint(model, model_ema, cfg.finetune_from, amp=cfg.use_fp16)
     elif cfg.load_from:

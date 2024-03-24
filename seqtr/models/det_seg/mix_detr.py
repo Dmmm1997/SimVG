@@ -1,13 +1,7 @@
 import torch
-import numpy
 from seqtr.models import MODELS
-from mmdet.core import BitmapMasks
-import pycocotools.mask as maskUtils
 from .one_stage import OneStageModel
 from detectron2.modeling import detector_postprocess
-import torch.nn.functional as F
-from detrex.layers.box_ops import box_cxcywh_to_xyxy
-from detectron2.structures import Boxes, ImageList, Instances
 
 
 @MODELS.register_module()

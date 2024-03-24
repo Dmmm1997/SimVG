@@ -25,3 +25,25 @@ def reduce_mean(tensor):
     tensor = tensor.clone()
     dist.all_reduce(tensor.div_(dist.get_world_size()), op=dist.ReduceOp.SUM)
     return tensor
+
+def is_dist_avail_and_initialized() -> bool:
+    """
+    Checking if the distributed package is available and
+    the default process group has been initialized.
+    """
+    if not dist.is_available():
+        return False
+    if not dist.is_initialized():
+        return False
+    return True
+
+
+def get_world_size() -> int:
+    """
+    Returns the number of processes.
+    """
+    if not is_dist_avail_and_initialized():
+        return 1
+    return dist.get_world_size()
+
+

@@ -3,7 +3,7 @@ import numpy
 from .utils import tokenize
 from .builder import DATASETS
 from .pipelines import Compose
-from pydantic import ListMinLengthError
+# from pydantic import ListMinLengthError
 from torch.utils.data.dataset import Dataset
 from seqtr.utils import get_root_logger, is_main
 from .vgtr_utils.word_utils import Corpus
@@ -33,7 +33,7 @@ class BaseDataset(Dataset):
             assert isinstance(imgsfile, dict)
             self.imgsfile = imgsfile
         else:
-            raise ListMinLengthError
+            raise TypeError("None")
 
         self.anns_all = json.load(open(annsfile, 'r'))
 

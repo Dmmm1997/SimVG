@@ -4,12 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from copy import deepcopy
 
-from detrex.layers.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh, box_iou
-from detrex.layers.mlp import MLP
-from detrex.modeling.criterion.criterion import SetCriterion
-from detrex.layers.position_embedding import PositionEmbeddingLearned, PositionEmbeddingSine, PositionEmbeddingSine1D
-from detrex.modeling.matcher.matcher import HungarianMatcher
-from detectron2.structures import Boxes, ImageList, Instances
+from seqtr.layers.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh, box_iou
+from seqtr.layers.mlp import MLP
+from seqtr.core.criterion import SetCriterion
+from seqtr.layers.position_embedding import PositionEmbeddingSine, PositionEmbeddingSine1D
+from seqtr.core.matcher import HungarianMatcher
+from seqtr.core.structure import Boxes, Instances
 from seqtr.models.utils import freeze_params
 from .transformer import DetrTransformer, DetrTransformerEncoder, DetrTransformerDecoder
 from seqtr.models import HEADS

@@ -6,9 +6,9 @@ import torch.nn.functional as F
 from detrex.layers.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
 from detrex.layers.mlp import MLP
 from detrex.modeling.criterion.criterion import SetCriterion
-from detrex.layers.position_embedding import PositionEmbeddingLearned, PositionEmbeddingSine
+from detrex.layers.position_embedding import PositionEmbeddingSine
 from detrex.modeling.matcher.matcher import HungarianMatcher
-from detectron2.structures import Boxes, ImageList, Instances
+from detectron2.structures import Boxes, Instances
 
 from .transformer import DetrTransformer, DetrTransformerEncoder, DetrTransformerDecoder
 from seqtr.models import HEADS

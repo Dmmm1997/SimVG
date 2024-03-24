@@ -1,10 +1,11 @@
 _base_ = [
-    "../../../_base_/datasets/detection/refcoco-unc.py",
+    "../../../_base_/datasets/detection/mixed_coco_all.py",
     "../../../_base_/misc.py",
 ]
 
+dataset = 'Mixed'
 max_token = 20
-img_size = 512
+img_size = 640
 
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375])
 
@@ -13,10 +14,10 @@ train_pipeline = [
         type="LoadImageAnnotationsFromFile",
         max_token=max_token,
         with_bbox=True,
-        dataset="RefCOCOUNC",
+        dataset=dataset,
         use_token_type="beit3",
     ),
-    dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
+    # dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
     dict(type="Resize", img_scale=(img_size, img_size), keep_ratio=False),
     dict(type="Normalize", **img_norm_cfg),
     dict(type="Pad", size_divisor=32),
@@ -33,7 +34,7 @@ val_pipeline = [
         type="LoadImageAnnotationsFromFile",
         max_token=max_token,
         with_bbox=True,
-        dataset="RefCOCOUNC",
+        dataset=dataset,
         use_token_type="beit3",
     ),
     dict(type="Resize", img_scale=(img_size, img_size), keep_ratio=False),
@@ -49,20 +50,20 @@ val_pipeline = [
 test_pipeline = val_pipeline.copy()
 
 data = dict(
-    samples_per_gpu=32,
+    samples_per_gpu=16,
     workers_per_gpu=2,
     train=dict(
         pipeline=train_pipeline,
     ),
-    val=dict(
+    val_refcoco_unc=dict(
         pipeline=val_pipeline,
     ),
-    testA=dict(
+    val_refcocoplus_unc=dict(
         pipeline=test_pipeline,
     ),
-    testB=dict(
+    val_refcocog_umd=dict(
         pipeline=test_pipeline,
-    ),
+    )
 )
 
 model = dict(
@@ -93,23 +94,22 @@ model = dict(
         num_decoder_layers=3,
         only_decoder=True,
         text_embed_aug=False,
-        branch_loss_weight={"decoder":1.0, "token": 1.0, "aux_distill":1.0},
+        branch_loss_weight={"decoder": 1.0, "token":1.0},
         distill_type="hard_weighted", # "hard", "hard_weighted", "soft"
         prepare_target_mode="score_iou_weighted", # "score_weighted", "score_iou_weighted"
         share_predicthead=False,
         num_token_mlp_layers=3,
         mlp_aux_loss=False,
-        aux_distill_mode="klloss"
     ),
 )
 
 grad_norm_clip = 0.15
 use_fp16 = False
-ema = False
+ema = True
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
-work_dir = "work_dir/beit3_multibranch_(3-14)/(3-15)noema#1.0token#1.0decoder#1.0auxdistill"
+work_dir = "work_dir/beit3_pretrain/(3-15)VITBaseP32+COCOALL#ema#1.0decoder#1token"
 
-lr = 0.0003
+lr = 0.0005
 optimizer_config = dict(
     type="Adam",
     lr=lr,
