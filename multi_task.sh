@@ -16,11 +16,11 @@
 # bash tools/dist_train.sh "configs/exp_for_paper/decoder_ablation/ViTBaseP32-1.0decoder-30ep-512hw-6layer-refcocounc.py" 2
 
 # bash z_exeriments_scripts/layers.sh
-bash z_exeriments_scripts/distill.sh
+# bash z_exeriments_scripts/distill.sh
 
 
-# bash tools/dist_train.sh "configs/beit3/exp_for_paper/baseline/ViTBaseP32-1.0decoder-40ep-640hw-refcocounc.py" 2
-# bash tools/dist_train.sh "configs/beit3/exp_for_paper/baseline/ViTBaseP32-1.0decoder-40ep-640hw-refcocoplusunc.py" 2
+bash tools/dist_train.sh "configs/paper_exp/sota_model/phrase/noema_ViTBaseP32-1.0decoder-20ep-640hw-tgqg_layer2_flickr30k_distill.py" 2
+bash tools/dist_train.sh "configs/paper_exp/sota_model/phrase/noema_ViTBaseP32-1.0decoder-20ep-640hw-tgqg_layer2_referit_distill.py" 2
 # bash tools/dist_train.sh "configs/beit3/exp_for_paper/baseline/ViTBaseP32-1.0decoder-40ep-640hw-refcocogumd.py" 2
 # bash tools/dist_train.sh "configs/beit3/exp_for_paper/baseline/ViTBaseP32-1.0decoder-40ep-640hw-refcocoggoogle.py" 2
 

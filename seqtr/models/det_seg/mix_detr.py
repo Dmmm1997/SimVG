@@ -53,7 +53,7 @@ class MIXDETR(OneStageModel):
         img_feat = img_feat.transpose(-1, -2).reshape(B, -1, H // self.patch_size, W // self.patch_size)
 
         losses_dict, output = self.head.forward_train(
-            img_feat, img_metas, gt_bbox=gt_bbox, text_feat=text_feat, gt_mask_vertices=gt_mask_vertices
+            img_feat, img_metas, gt_bbox=gt_bbox, text_feat=text_feat
         )
 
         with torch.no_grad():

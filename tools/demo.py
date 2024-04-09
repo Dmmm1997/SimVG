@@ -16,21 +16,27 @@ from seqtr.core import imshow_expr_bbox
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--img", default="data/demo.jpg", help="Image file")
-    parser.add_argument("--text", default="the smaller chair", help="text")
+    parser.add_argument("--expression", default="the red car and the white car", help="text")
     parser.add_argument(
         "--config",
-        default="work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/20240314_165033_(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif.py",
+        default="work_dir/paper_exp/sota_model/grefcoco/**ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200/20240328_062705/20240328_062705_ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200.py",
         help="Config file",
     )
     parser.add_argument(
         "--checkpoint",
-        default="work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead#1.0aux_distill#schedulerdif/20240314_165033/det_best.pth",
+        default="work_dir/paper_exp/sota_model/grefcoco/**ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200/20240328_062705/det_best.pth",
         help="Checkpoint file",
+    )
+    parser.add_argument(
+        "--branch",
+        default="decoder",
+        choices=["token","decoder"],
+        help="token or decoder branch can be select",
     )
     parser.add_argument("--output_dir", default="visualize/results", help="Path to output file")
     parser.add_argument("--device", default="cuda:0", help="Device used for inference")
     parser.add_argument("--palette", default="coco", choices=["coco", "voc", "citys", "random"], help="Color palette used for visualization")
-    parser.add_argument("--score-thr", type=float, default=0.3, help="bbox score threshold")
+    parser.add_argument("--score-thr", type=float, default=0.7, help="bbox score threshold")
     parser.add_argument("--async-test", action="store_true", help="whether to set async options for async inference.")
     args = parser.parse_args()
     return args
@@ -38,6 +44,8 @@ def parse_args():
 
 def init_detector(args):
     cfg = Config.fromfile(args.config)
+    cfg.img = args.img
+    cfg.expression = args.expression
     cfg.output_dir = args.output_dir
     cfg.score_thr = args.score_thr
     cfg.device = args.device
@@ -47,12 +55,17 @@ def init_detector(args):
     return model, cfg
 
 
-def inference_detector(cfg, model, img, text):
+def inference_detector(cfg, model):
+    img, text = cfg.img, cfg.expression
     cfg.data.val.pipeline[0].type = "LoadFromRawSource"
     test_pipeline = Compose(cfg.data.val.pipeline)
     result = {}
     ann = {}
-    ann["bbox"] = [0, 0, 0, 0]
+    if cfg["dataset"] == "GRefCOCO":
+        ann["bbox"] = [[[0, 0, 0, 0]]]
+        ann["annotations"] = ["no target"]
+    else:
+        ann["bbox"] = [0, 0, 0, 0]
     ann["category_id"] = 0
     ann["expressions"] = [text]
     result["ann"] = ann
@@ -67,9 +80,8 @@ def inference_detector(cfg, model, img, text):
 
     if "gt_bbox" in inputs:
         inputs.pop("gt_bbox")
-
-    predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=True)[1]
-
+    index = 1 if args.branch=="token" else 0
+    predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=True)[index]
     return predictions, img_metas
 
 
@@ -80,7 +92,7 @@ def draw_results(cfg, predictions, img_metas):
         for pred_bbox in pred_bboxes:
             img_level_bboxes = pred_bbox["boxes"]
             scores = pred_bbox["scores"]
-            keep_ind = scores > cfg.score_threahold
+            keep_ind = scores > cfg.score_thr
             img_level_bboxes = img_level_bboxes[keep_ind]
             tmp_pred_bboxes.append(img_level_bboxes)
         pred_bboxes = tmp_pred_bboxes
@@ -99,7 +111,7 @@ def main(args):
     model, cfg = init_detector(args)
     model.to(args.device)
     # test a single image
-    predictions, img_metas = inference_detector(cfg, model, args.img, args.text)
+    predictions, img_metas = inference_detector(cfg, model)
     # show the results
     draw_results(cfg, predictions, img_metas)
 

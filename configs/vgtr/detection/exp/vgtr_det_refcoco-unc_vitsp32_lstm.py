@@ -1,15 +1,15 @@
 _base_ = [
     "../../../_base_/datasets/detection/refcoco-unc.py",
-    "../../../_base_/misc.py",
-    "../vgtr_det_vitsp32.py",
+    "../../../_base_/misc.py"
 ]
 
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=32,
     workers_per_gpu=4,
 )
 
 model = dict(
+    type="VGTR",
     vis_enc=dict(
         type="VIT",
         freeze_layer=-1,
@@ -47,9 +47,9 @@ model = dict(
 )
 
 use_fp16 = False
-ema = True
+ema = False
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
-work_dir = "work_dir/vgtr/vgtr_det_refcoco-unc_vitbp32_lstm_size512"
+# work_dir = "work_dir/vgtr/vgtr_det_refcoco-unc_vitbp32_lstm_size512"
 
 # optimizer_config = dict(type="Adam", lr=0.0002, betas=(0.9, 0.98), eps=1e-9, weight_decay=0, amsgrad=True)
 lr = 0.0005

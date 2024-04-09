@@ -72,8 +72,10 @@ since = time.time()
 for _ in tqdm(range(args.test_samples_number)):
     model(**tmp_inputs)
 
-print("inference_time = {}ms/iter".format((time.time()-since)/args.test_samples_number))
+print("inference_time = {}ms/iter".format((time.time()-since)/args.test_samples_number*1000))
 
 # thop计算MACs
 macs, params = calc_flops_params(
     model, tmp_inputs)
+
+print("total_macs:{}, total_params:{}".format(macs, params))

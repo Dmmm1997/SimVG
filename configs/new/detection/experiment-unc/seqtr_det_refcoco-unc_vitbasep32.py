@@ -5,7 +5,7 @@ _base_ = [
 ]
 
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=32,
     workers_per_gpu=4,
 )
 
@@ -23,7 +23,7 @@ model = dict(
 )
 
 use_fp16 = False
-ema = True
+ema = False
 work_dir = "work_dir/seqtr/seqtr_det_refcoco-unc_vitbp32_nofreeze"
 
 lr = 0.0005

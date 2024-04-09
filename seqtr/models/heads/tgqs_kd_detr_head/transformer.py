@@ -192,7 +192,7 @@ class DetrTransformer(nn.Module):
         if not only_decoder:
             self.encoder = encoder
         self.decoder = decoder
-        self.embed_dim = encoder.embed_dim
+        self.embed_dim = decoder.embed_dim
         self.only_decoder = only_decoder
 
         self.init_weights()
