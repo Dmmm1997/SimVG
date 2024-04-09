@@ -35,32 +35,64 @@ def imshow_expr_bbox(filename,
                      pred_bbox,
                      outfile,
                      gt_bbox=None,
-                     pred_bbox_color='red',
-                     gt_bbox_color='blue',
+                     pred_bbox_color='r',
+                     gt_bbox_color='b',
                      thickness=2):
-    plt.clf()
-    _, axe = plt.subplots()
+    # plt.clf()
+    # _, axe = plt.subplots()
 
-    pred_bbox_color = color_val_matplotlib(pred_bbox_color)
-    gt_bbox_color = color_val_matplotlib(gt_bbox_color)
+    # pred_bbox_color = color_val_matplotlib(pred_bbox_color)
+    # gt_bbox_color = color_val_matplotlib(gt_bbox_color)
 
-    img = mmcv.imread(filename, channel_order="rgb").astype(numpy.uint8)
-    img = numpy.ascontiguousarray(img)
+    # img = mmcv.imread(filename, channel_order="rgb").astype(numpy.uint8)
+    # img = numpy.ascontiguousarray(img)
+    # if pred_bbox is not None and pred_bbox.shape[0]!=0:
+    #     if len(pred_bbox.shape)==2:
+    #         pred_bboxes = pred_bbox
+    #     else:
+    #         pred_bboxes = pred_bbox.unsqueeze(0)
+    #     for pred_bbox in pred_bboxes:
+    #         pred_bbox_int = pred_bbox.long().cpu()
+    #         pred_bbox_poly = [[pred_bbox_int[0], pred_bbox_int[1]], [pred_bbox_int[2], pred_bbox_int[1]],
+    #                         [pred_bbox_int[2], pred_bbox_int[3]], [pred_bbox_int[0], pred_bbox_int[3]]]
+    #         pred_bbox_poly = numpy.array(pred_bbox_poly).reshape((4, 2))
+    #         pred_polygon = Polygon(pred_bbox_poly)
+    #         pred_patch = PatchCollection([pred_polygon], facecolor='none', edgecolors=[
+    #                                     pred_bbox_color], linewidths=thickness)
+
+    #         axe.add_collection(pred_patch)
+
+    # if gt_bbox is not None:
+    #     if len(gt_bbox.shape)==2:
+    #         gt_bboxes = gt_bbox
+    #     else:
+    #         gt_bboxes = gt_bbox.unsqueeze(0)
+    #     for gt_bbox in gt_bboxes:
+    #         gt_bbox_int = gt_bbox.long().cpu()
+    #         gt_bbox_poly = [[gt_bbox_int[0], gt_bbox_int[1]], [gt_bbox_int[0], gt_bbox_int[3]],
+    #                         [gt_bbox_int[2], gt_bbox_int[3]], [gt_bbox_int[2], gt_bbox_int[1]]]
+    #         gt_bbox_poly = numpy.array(gt_bbox_poly).reshape((4, 2))
+    #         gt_polygon = Polygon(gt_bbox_poly)
+    #         gt_patch = PatchCollection(
+    #             [gt_polygon], facecolor='none', edgecolors=[gt_bbox_color], linewidths=thickness)
+    #         axe.add_collection(gt_patch)
+        
+
+    # axe.axis('off')
+    # axe.imshow(img)
+    # plt.savefig(outfile)
+
+    # plt.close()
+    
+    img = cv2.imread(filename)
     if pred_bbox is not None and pred_bbox.shape[0]!=0:
         if len(pred_bbox.shape)==2:
             pred_bboxes = pred_bbox
         else:
             pred_bboxes = pred_bbox.unsqueeze(0)
         for pred_bbox in pred_bboxes:
-            pred_bbox_int = pred_bbox.long().cpu()
-            pred_bbox_poly = [[pred_bbox_int[0], pred_bbox_int[1]], [pred_bbox_int[2], pred_bbox_int[1]],
-                            [pred_bbox_int[2], pred_bbox_int[3]], [pred_bbox_int[0], pred_bbox_int[3]]]
-            pred_bbox_poly = numpy.array(pred_bbox_poly).reshape((4, 2))
-            pred_polygon = Polygon(pred_bbox_poly)
-            pred_patch = PatchCollection([pred_polygon], facecolor='none', edgecolors=[
-                                        pred_bbox_color], linewidths=thickness)
-
-            axe.add_collection(pred_patch)
+            pred_bbox_int = pred_bbox.long().cpu().detach().numpy()
+            cv2.rectangle(img,(pred_bbox_int[0], pred_bbox_int[1]), (pred_bbox_int[2], pred_bbox_int[3]), color=[255,0,0], thickness=2)
 
     if gt_bbox is not None:
         if len(gt_bbox.shape)==2:
@@ -68,21 +100,10 @@ def imshow_expr_bbox(filename,
         else:
             gt_bboxes = gt_bbox.unsqueeze(0)
         for gt_bbox in gt_bboxes:
-            gt_bbox_int = gt_bbox.long().cpu()
-            gt_bbox_poly = [[gt_bbox_int[0], gt_bbox_int[1]], [gt_bbox_int[0], gt_bbox_int[3]],
-                            [gt_bbox_int[2], gt_bbox_int[3]], [gt_bbox_int[2], gt_bbox_int[1]]]
-            gt_bbox_poly = numpy.array(gt_bbox_poly).reshape((4, 2))
-            gt_polygon = Polygon(gt_bbox_poly)
-            gt_patch = PatchCollection(
-                [gt_polygon], facecolor='none', edgecolors=[gt_bbox_color], linewidths=thickness)
-            axe.add_collection(gt_patch)
-        
-
-    axe.axis('off')
-    axe.imshow(img)
-    plt.savefig(outfile)
-
-    plt.close()
+            gt_bbox_int = gt_bbox.long().cpu().detach().numpy()
+            cv2.rectangle(img,(gt_bbox_int[0], gt_bbox_int[1]), (gt_bbox_int[2], gt_bbox_int[3]), color=[0,0,255], thickness=2)
+            
+    cv2.imwrite(outfile, img)
 
 
 def imshow_expr_mask(filename,

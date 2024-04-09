@@ -1,11 +1,10 @@
 _base_ = [
-    "../_base_/datasets/detection/grefcoco.py",
-    "../_base_/misc.py",
+    "../../_base_/datasets/detection/refcoco-unc.py",
+    "../../_base_/misc.py",
 ]
-
+dataset= "RefCOCOUNC"
 max_token = 20
 img_size = 512
-epoch=100
 
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375])
 
@@ -14,10 +13,10 @@ train_pipeline = [
         type="LoadImageAnnotationsFromFile",
         max_token=max_token,
         with_bbox=True,
-        dataset="GRefCOCO",
+        dataset=dataset,
         use_token_type="beit3",
     ),
-    # dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
+    dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
     dict(type="Resize", img_scale=(img_size, img_size), keep_ratio=False),
     dict(type="Normalize", **img_norm_cfg),
     dict(type="Pad", size_divisor=32),
@@ -26,7 +25,6 @@ train_pipeline = [
     dict(
         type="CollectData",
         keys=["img", "ref_expr_inds", "gt_bbox", "text_attention_mask"],
-        meta_keys=('filename', 'expression', 'ori_shape', 'img_shape', 'pad_shape', 'scale_factor',"target"), 
     ),
 ]
 
@@ -35,7 +33,7 @@ val_pipeline = [
         type="LoadImageAnnotationsFromFile",
         max_token=max_token,
         with_bbox=True,
-        dataset="GRefCOCO",
+        dataset=dataset,
         use_token_type="beit3",
     ),
     dict(type="Resize", img_scale=(img_size, img_size), keep_ratio=False),
@@ -46,7 +44,6 @@ val_pipeline = [
     dict(
         type="CollectData",
         keys=["img", "ref_expr_inds", "gt_bbox", "text_attention_mask"],
-        meta_keys=('filename', 'expression', 'ori_shape', 'img_shape', 'pad_shape', 'scale_factor',"target"), 
     ),
 ]
 test_pipeline = val_pipeline.copy()
@@ -69,7 +66,7 @@ data = dict(
 )
 
 model = dict(
-    type="MIXDETR",
+    type="MIXDETRMB",
     vis_enc=dict(
         type="BEIT3",
         img_size=img_size,
@@ -84,26 +81,36 @@ model = dict(
     lan_enc=None,
     fusion=None,
     head=dict(
-        type="TextGuidedQuerySelectDETRHead",
-        num_queries=20,
+        type="TextGuidedQuerySelectKDDETRHead",
+        num_queries=1,
         text_max_token=max_token,
         in_channels=768,
         embed_dim=256,
+        decoder_freeze=False,
         num_classes=1,
         aux_loss=True,
         num_encoder_layers=6,
         num_decoder_layers=3,
         only_decoder=True,
+        text_embed_aug=False,
+        branch_loss_weight={"decoder": 1.0},
+        distill_type="hard_weighted", # "hard", "hard_weighted", "soft"
+        prepare_target_mode="score_iou_weighted", # "score_weighted", "score_iou_weighted"
+        share_predicthead=False,
+        num_token_mlp_layers=1,
+        mlp_aux_loss=False,
+        text_guided_query_generation=True,
+        num_tgqg_layers=4,
     ),
 )
 
 grad_norm_clip = 0.15
 use_fp16 = False
-ema = True
+ema = False
+# work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
+# work_dir = "work_dir/paper_exp/decoder_ablation/ViTBaseP32-1.0decoder-40ep-512hw-refcocounc"
 
-work_dir = "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100"
-
-lr = 0.0003
+lr = 0.0005
 optimizer_config = dict(
     type="Adam",
     lr=lr,
@@ -118,9 +125,9 @@ optimizer_config = dict(
 scheduler_config = dict(
     type="MultiStepLRWarmUp",
     warmup_epochs=3,
-    decay_steps=[int(epoch*0.9)],
+    decay_steps=[21, 27],
     decay_ratio=0.1,
-    max_epoch=epoch,
+    max_epoch=30,
 )
 
-load_from = "work_dir/beit3_grefcoco/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq20_ep100/det_best.pth"
+log_interval = 50

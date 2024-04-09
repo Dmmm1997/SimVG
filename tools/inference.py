@@ -8,11 +8,11 @@ from seqtr.apis import inference_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="macvg-inference")
-    parser.add_argument('config', help='inference config file path.')
+    parser.add_argument('--config', default="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco/20240325_113117/20240325_113117_ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco.py",help='inference config file path.')
     parser.add_argument(
-        'checkpoint', help='the checkpoint file to load from.')
+        '--checkpoint', default="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco/20240325_113117/det_best.pth",help='the checkpoint file to load from.')
     parser.add_argument(
-        '--output-dir', default="visualization", help='directory where inference results will be saved.')
+        '--output-dir', default="visualization/", help='directory where inference results will be saved.')
     parser.add_argument('--with-gt', action='store_true', default=True,
                         help='draw ground-truth bbox/mask on image if true.')
     parser.add_argument('--no-overlay', action='store_false', dest='overlay')

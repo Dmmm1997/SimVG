@@ -62,11 +62,10 @@ class VGTR(OneStageModel):
         img_size = torch.tensor(img.shape[-2:], device=img.device)
         norm_bbox = norm_bbox / (img_size.unsqueeze(0).repeat((img.shape[0], 2)))
         loss, loss_box, loss_giou = self.loss(pred, norm_bbox)
-        losses_dict = {"loss_det": loss, "loss_box": loss_box, "loss_giou": loss_giou}
+        losses_dict = {"loss_total": loss, "loss_box": loss_box, "loss_giou": loss_giou}
 
         with torch.no_grad():
             predictions = self.get_predictions(pred, img_metas, img_size)
-
         return losses_dict, predictions
 
     def extract_visual_language(self, img, img_metas, ref_expr_inds):

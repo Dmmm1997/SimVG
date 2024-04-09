@@ -123,63 +123,64 @@ def main_worker(cfg):
         this_epoch_train_time = int(time.time() - start_time)
         if is_main():
             logger.info("this_epoch_train_time={}m-{}s".format(this_epoch_train_time // 60, this_epoch_train_time % 60))
-        d_acc, miou = 0, 0
-        for _loader in dataloaders[1:]:
-            if is_main():
-                logger.info("Evaluating dataset: {}".format(_loader.dataset.which_set))
-            set_d_acc, set_miou = evaluate_model(epoch, cfg, model, _loader)
-
-            if cfg.ema:
+            
+        if epoch%cfg.evaluate_interval==0 and epoch>=cfg.start_evaluate_epoch:
+            d_acc, miou = 0, 0
+            for _loader in dataloaders[1:]:
                 if is_main():
-                    logger.info("Evaluating dataset using ema: {}".format(_loader.dataset.which_set))
-                model_ema.apply_shadow()
-                ema_set_d_acc, ema_set_miou = evaluate_model(epoch, cfg, model, _loader)
-                model_ema.restore()
+                    logger.info("Evaluating dataset: {}".format(_loader.dataset.which_set))
+                set_d_acc, set_miou = evaluate_model(epoch, cfg, model, _loader)
 
-            if cfg.ema:
-                d_acc += ema_set_d_acc
-                miou += ema_set_miou
-            else:
-                d_acc += set_d_acc
-                miou += set_miou
+                if cfg.ema:
+                    if is_main():
+                        logger.info("Evaluating dataset using ema: {}".format(_loader.dataset.which_set))
+                    model_ema.apply_shadow()
+                    ema_set_d_acc, ema_set_miou = evaluate_model(epoch, cfg, model, _loader)
+                    model_ema.restore()
 
-        d_acc /= len(dataloaders[1:])
-        miou /= len(dataloaders[1:])
+                if cfg.ema:
+                    d_acc += ema_set_d_acc
+                    miou += ema_set_miou
+                else:
+                    d_acc += set_d_acc
+                    miou += set_miou
 
-        if is_main():
-            this_epoch_total_time = int(time.time() - start_time)
-            logger.info("this_epoch_total_time={}m-{}s".format(this_epoch_total_time // 60, this_epoch_total_time % 60))
-            total_time = int(time.time() - begin_time)
-            logger.info("total_time={}m-{}s".format(total_time // 60, total_time % 60))
+            d_acc /= len(dataloaders[1:])
+            miou /= len(dataloaders[1:])
 
-        if is_main():
-            # if cfg["dataset"]=="GRefCOCO":
-            #     saved_info = {"epoch": epoch, "f1_score": d_acc, "n_acc": miou, "best_f1_score": best_d_acc, "best_n_acc": best_miou, "amp": cfg.use_fp16}
-            # else:
-            #     saved_info = {"epoch": epoch, "d_acc": d_acc, "miou": miou, "best_d_acc": best_d_acc, "best_miou": best_miou, "amp": cfg.use_fp16}
-            saved_info = {
-                "epoch": epoch,
-                "d_acc": d_acc,
-                "miou": miou,
-                "best_d_acc": best_d_acc,
-                "best_miou": best_miou,
-                "amp": cfg.use_fp16,
-            }
-            save_checkpoint(
-                cfg.work_dir,
-                cfg.save_interval,
-                model,
-                model_ema,
-                optimizer,
-                scheduler,
-                saved_info,
-            )
+            if is_main():
+                this_epoch_total_time = int(time.time() - start_time)
+                logger.info("this_epoch_total_time={}m-{}s".format(this_epoch_total_time // 60, this_epoch_total_time % 60))
+                total_time = int(time.time() - begin_time)
+                logger.info("total_time={}m-{}s".format(total_time // 60, total_time % 60))
+
+            if is_main():
+                # if cfg["dataset"]=="GRefCOCO":
+                #     saved_info = {"epoch": epoch, "f1_score": d_acc, "n_acc": miou, "best_f1_score": best_d_acc, "best_n_acc": best_miou, "amp": cfg.use_fp16}
+                # else:
+                #     saved_info = {"epoch": epoch, "d_acc": d_acc, "miou": miou, "best_d_acc": best_d_acc, "best_miou": best_miou, "amp": cfg.use_fp16}
+                saved_info = {
+                    "epoch": epoch,
+                    "d_acc": d_acc,
+                    "miou": miou,
+                    "best_d_acc": best_d_acc,
+                    "best_miou": best_miou,
+                    "amp": cfg.use_fp16,
+                }
+                save_checkpoint(
+                    cfg.work_dir,
+                    cfg.save_interval,
+                    model,
+                    model_ema,
+                    optimizer,
+                    scheduler,
+                    saved_info,
+                )
+            best_d_acc = max(d_acc, best_d_acc)
+            best_miou = max(miou, best_miou)
 
         scheduler.step()
-
-        best_d_acc = max(d_acc, best_d_acc)
-        best_miou = max(miou, best_miou)
-
+        
         if cfg.distributed:
             dist.barrier()
 

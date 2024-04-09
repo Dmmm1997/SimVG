@@ -61,7 +61,7 @@ def inference_model(cfg):
                 img_metas = inputs["img_metas"]
                 batch_size = len(img_metas)
 
-                predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=with_bbox, with_mask=with_mask)[1]
+                predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=with_bbox, with_mask=with_mask)[0]
 
                 pred_bboxes = [None for _ in range(batch_size)]
                 if with_bbox:

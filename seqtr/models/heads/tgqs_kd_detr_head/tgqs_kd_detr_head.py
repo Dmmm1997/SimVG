@@ -70,7 +70,6 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         self.input_proj = nn.Conv2d(in_channels, embed_dim, kernel_size=1)
         self.input_text_proj = nn.Linear(in_channels, embed_dim)
         self.input_cls_proj = nn.Linear(in_channels, embed_dim)
-        self.text_guided_query_generation_proj = nn.Linear(text_max_token, num_queries)
         self.num_queries = num_queries
         self.text_embed_aug = text_embed_aug
         self.as_target_query_thr = as_target_query_thr
@@ -113,27 +112,18 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             self.bbox_embed_decoder = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
             self.class_embed_token = nn.Linear(embed_dim, num_classes + 1)
             self.bbox_embed_token = MLP(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=4, num_layers=3)
-
-        self.text_guided_query_generation_transformer = DetrTransformerDecoder(
-                embed_dim=embed_dim,
-                num_heads=8,
-                attn_dropout=0.1,
-                feedforward_dim=2048,
-                ffn_dropout=0.1,
-                num_layers=num_tgqg_layers,
-                return_intermediate=False,
-                post_norm=True,
-            )
-        
-        # self.text_guided_query_generation_transformer = DetrTransformerEncoder(
-        #         embed_dim=embed_dim,
-        #         num_heads=8,
-        #         attn_dropout=0.1,
-        #         feedforward_dim=2048,
-        #         ffn_dropout=0.1,
-        #         num_layers=1,
-        #         post_norm=False,
-        #     )
+            
+        if text_guided_query_generation:
+            self.text_guided_query_generation_transformer = DetrTransformerDecoder(
+                    embed_dim=embed_dim,
+                    num_heads=8,
+                    attn_dropout=0.1,
+                    feedforward_dim=512,
+                    ffn_dropout=0.1,
+                    num_layers=num_tgqg_layers,
+                    return_intermediate=False,
+                    post_norm=True,
+                )
         
         self.matcher = HungarianMatcher(
             cost_class=1,
@@ -216,7 +206,7 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         # decoder_branch_output_new = deepcopy(decoder_branch_output)
         decoder_pred_logits = decoder_branch_output["pred_logits"].detach().data
         decoder_pred_boxes = decoder_branch_output["pred_boxes"].detach().data
-        decoder_scores = F.softmax(decoder_pred_logits, dim=-1)[:, :, 0:1]
+        decoder_scores = F.softmax(decoder_pred_logits, dim=-1)[:, :, 0:1].detach().data
         # decoder_scores = F.softmax(decoder_branch_output["pred_logits"], dim=-1)
         for target_bbox, img_meta in zip(targets, img_metas):
             h, w = img_meta["img_shape"][:2]
@@ -226,8 +216,15 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 gt_classes = torch.zeros(1, device=target_bbox_.device).long()
             else:  # for grec
                 assert int(target_bbox.shape[0]) == len(img_meta["target"])
-                gt_classes = torch.tensor([1 if t["category_id"] == -1 else 0 for t in img_meta["target"]], device=target_bbox.device).long()
-                target_bbox_ = target_bbox
+                gt_classes = []
+                target_bbox_ = torch.zeros((0,4),device=target_bbox.device)
+                for ind, t in enumerate(img_meta["target"]):
+                    if t["category_id"] != -1:
+                        gt_classes.append(0)
+                        target_bbox_ = torch.concat((target_bbox_, target_bbox[ind:ind+1]))
+                gt_classes = torch.tensor(gt_classes, device=target_bbox.device).long()
+                # gt_classes = torch.tensor([1 if t["category_id"] == -1 else 0 for t in img_meta["target"]], device=target_bbox.device).long()
+                # target_bbox_ = target_bbox
             gt_boxes = target_bbox_.float() / image_size_xyxy
             gt_boxes = box_xyxy_to_cxcywh(gt_boxes).float()
             new_targets_gt.append({"labels": gt_classes, "boxes": gt_boxes})
@@ -254,13 +251,32 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 target_gt_ = target_gt["boxes"][indice[1]]
                 target_gt_ = torch.cat([target_gt_], dim=0)
                 ious = torch.diag(box_iou(box_cxcywh_to_xyxy(predict_bbox_), box_cxcywh_to_xyxy(target_gt_))[0])
-                predict_score = predict_score[indice[0]]
-                predict_weight = predict_score * ious
+                predict_score_ = predict_score[indice[0]].reshape(-1)
+                predict_weight = predict_score_ * ious
                 if predict_weight.shape[0] == 0:
                     gt_classes = torch.tensor([], device=target_bbox.device).long()
                 else:
                     gt_classes = torch.zeros((predict_bbox_.shape[0]), device=target_bbox.device).long()
                 new_targets_pred.append({"labels": gt_classes, "boxes": predict_bbox_, "weight": predict_weight})
+        # elif prepare_target_mode == "score_iou_weighted":  # iou weighted distill
+        #     new_targets_gt_out = deepcopy(new_targets_gt)
+        #     decoder_pred_boxes = deepcopy(decoder_pred_boxes)
+        #     decoder_scores = deepcopy(decoder_scores)
+        #     indices = self.matcher(decoder_branch_output, new_targets_gt_out)
+        #     for indice, predict_bbox, predict_score, target_gt, img_meta in zip(indices, decoder_pred_boxes, decoder_scores, new_targets_gt_out, img_metas):
+        #         predict_bbox_ = predict_bbox[indice[0]]
+        #         target_gt_ = target_gt["boxes"][indice[1]]
+        #         target_gt_ = torch.cat([target_gt_], dim=0)
+        #         ious = torch.diag(box_iou(box_cxcywh_to_xyxy(predict_bbox_), box_cxcywh_to_xyxy(target_gt_))[0])
+        #         predict_score_ = predict_score[indice[0]].reshape(-1)
+        #         predict_weight = predict_score_ * ious
+        #         # if predict_weight.shape[0] == 0:
+        #         #     gt_classes = torch.tensor([1], device=target_bbox.device).long()
+        #         # else:
+        #         #     gt_classes = torch.zeros((predict_bbox_.shape[0]), device=target_bbox.device).long()
+        #         gt_classes = torch.ones((predict_bbox.shape[0]), device=target_bbox.device).long()
+        #         gt_classes[indice[0]]=0
+        #         new_targets_pred.append({"labels": gt_classes, "boxes": predict_bbox, "weight": predict_weight})
         else:
             raise TypeError("{} type is not support yet!! you can choose [score_weighted, iou_weighted] types!!!".format(prepare_target_mode))
 
@@ -395,8 +411,8 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             # transformer based type2
             # token_feat_input = cls_feat.transpose(0,1)
             text_feat_filter = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], text_feat, ~text_mask))).unsqueeze(1).repeat(1,self.num_queries,1)
-            query_embed = self.query_embed.weight.unsqueeze(0).repeat(x_mm.shape[0],1,1).transpose(0,1)
-            target = torch.zeros_like(query_embed)
+            query_embed_input = self.query_embed.weight.unsqueeze(0).repeat(x_mm.shape[0],1,1).transpose(0,1)
+            target = torch.zeros_like(query_embed_input)
             text_pos_embed = self.position_embedding_1d(text_feat).unsqueeze(0).repeat(text_feat.shape[0],1,1).permute(1,0,2).cuda()
             text_feat_input = text_feat.transpose(0,1)
             query_embed = self.text_guided_query_generation_transformer(
@@ -404,10 +420,11 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 key=text_feat_input,
                 value=text_feat_input,
                 key_pos=text_pos_embed,
-                query_pos=query_embed,
+                query_pos=query_embed_input,
                 key_padding_mask=text_mask.bool())
-            query_embed = query_embed[0].transpose(0,1) + text_feat_filter
+            query_embed = query_embed[0].transpose(0,1) + text_feat_filter + query_embed_input.transpose(0,1)
             cls_feat = query_embed + cls_feat
+        
                 
             ## type 3
             # query_embed = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], text_feat, ~text_mask))).unsqueeze(1).repeat(1,self.num_queries,1)
@@ -436,28 +453,46 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
         # else:
         #     cls_feat = cls_feat.repeat((1, self.num_queries, 1))
         
-        cls_feat = self.mlp(cls_feat)
-        if self.num_token_mlp_layers==0:
-            cls_feat = cls_feat.unsqueeze(0)
+        if "decoder" in self.branch_loss_weight and len(self.branch_loss_weight)==1:
+            token_branch_output = {
+                "pred_logits": None,
+                "pred_boxes": None,
+            }
+            outputs_class_token_branch=None
+            outputs_coord_token_branch=None
+        else:
+            cls_feat = self.mlp(cls_feat)
+            if self.num_token_mlp_layers==0:
+                cls_feat = cls_feat.unsqueeze(0)
+            # cls_feat branch
+            outputs_class_token_branch = self.class_embed_token(cls_feat)
+            outputs_coord_token_branch = self.bbox_embed_token(cls_feat).sigmoid()
+            token_branch_output = {
+                "pred_logits": outputs_class_token_branch[-1],
+                "pred_boxes": outputs_coord_token_branch[-1],
+            }
 
-        # decoder
-        hidden_states, _ = self.transformer(x_mm, img_masks, query_embed, pos_embed)
+        only_token=False
+        if not only_token:
+            # decoder
+            hidden_states, _ = self.transformer(x_mm, img_masks, query_embed, pos_embed)
 
-        # cls_feat branch
-        outputs_class_token_branch = self.class_embed_token(cls_feat)
-        outputs_coord_token_branch = self.bbox_embed_token(cls_feat).sigmoid()
-
-        outputs_class_decoder_branch = self.class_embed_decoder(hidden_states)
-        outputs_coord_decoder_branch = self.bbox_embed_decoder(hidden_states).sigmoid()
-
-        token_branch_output = {
-            "pred_logits": outputs_class_token_branch[-1],
-            "pred_boxes": outputs_coord_token_branch[-1],
-        }
-        decoder_branch_output = {
-            "pred_logits": outputs_class_decoder_branch[-1],
-            "pred_boxes": outputs_coord_decoder_branch[-1],
-        }
+            outputs_class_decoder_branch = self.class_embed_decoder(hidden_states)
+            outputs_coord_decoder_branch = self.bbox_embed_decoder(hidden_states).sigmoid()
+            
+            decoder_branch_output = {
+                "pred_logits": outputs_class_decoder_branch[-1],
+                "pred_boxes": outputs_coord_decoder_branch[-1],
+            }
+        else:
+            hidden_states = None
+            outputs_class_decoder_branch = None
+            outputs_coord_decoder_branch = None
+            decoder_branch_output = {
+                "pred_logits": None,
+                "pred_boxes": None,
+            }
+        
         output = {
             "token_branch_output": token_branch_output,
             "decoder_branch_output": decoder_branch_output,
@@ -505,6 +540,11 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
             loss_dict["loss_dgt"] = loss_decoder_branch
             
         if "balanced_distill" in self.branch_loss_weight:
+            # weight_distill_list = []
+            # for t in targets_predict:
+            #     weight_distill_list+=t["weight"].detach().cpu().numpy()
+            # weights_distill = torch.mean(weight_distill_list)
+                
             weights_distill = torch.mean(torch.cat([t["weight"] for t in targets_predict]))
             # print(weights_distill)
             
@@ -538,7 +578,6 @@ class TextGuidedQuerySelectKDDETRHead(nn.Module):
                 loss_token_branch = sum(loss_dict_token_branch_gt.values())
                 loss_token_branch = self.branch_loss_weight["token"] * loss_token_branch
                 loss_dict["loss_tgt"] = loss_token_branch
-                
                 
             if "distill" in self.branch_loss_weight:
                 # if mlp_aux_loss is False, select the last mlp output as the input of the loss

@@ -23,7 +23,7 @@ train_pipeline = [
     dict(type="CollectData", keys=["img", "ref_expr_inds", "gt_bbox"]),
 ]
 
-data = dict(samples_per_gpu=64, workers_per_gpu=4, train=dict(pipeline=train_pipeline))
+data = dict(samples_per_gpu=32, workers_per_gpu=4, train=dict(pipeline=train_pipeline))
 
 model = dict(
     vis_enc=dict(
@@ -63,12 +63,12 @@ model = dict(
 )
 
 use_fp16 = False
-ema = True
+ema = False
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
-work_dir = "work_dir/vgtr/vgtr_det_refcoco-unc_vitbp32_rnn_lr0.0002_frozonbackbone"
+# work_dir = "work_dir/vgtr/vgtr_det_refcoco-unc_vitbp32_rnn_lr0.0002_frozonbackbone"
 
 # optimizer_config = dict(type="Adam", lr=0.0002, betas=(0.9, 0.98), eps=1e-9, weight_decay=0, amsgrad=True)
-lr = 0.0002
+lr = 0.0005
 optimizer_config = dict(
     type="Adam",
     lr=lr,

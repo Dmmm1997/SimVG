@@ -53,8 +53,12 @@ class MIXDETRMB(OneStageModel):
         output_decoder_branch = output["decoder_branch_output"]
 
         with torch.no_grad():
-            predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
-            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
+            if img_metas[0].get("target", None) is None:
+                predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
+                predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
+            else: # grec output
+                predictions_token_branch = self.get_predictions_grec(output_token_branch, img_metas, rescale=rescale)
+                predictions_decoder_branch = self.get_predictions_grec(output_decoder_branch, img_metas, rescale=rescale)
             
         predictions = [predictions_decoder_branch, predictions_token_branch]
             
@@ -103,8 +107,12 @@ class MIXDETRMB(OneStageModel):
         output_decoder_branch = output["decoder_branch_output"] 
 
         with torch.no_grad():
-            predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
-            predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
+            if img_metas[0].get("target", None) is None:
+                predictions_token_branch = self.get_predictions(output_token_branch, img_metas, rescale=rescale)
+                predictions_decoder_branch = self.get_predictions(output_decoder_branch, img_metas, rescale=rescale)
+            else: # grec output
+                predictions_token_branch = self.get_predictions_grec(output_token_branch, img_metas, rescale=rescale)
+                predictions_decoder_branch = self.get_predictions_grec(output_decoder_branch, img_metas, rescale=rescale)
             
         predictions = [predictions_decoder_branch, predictions_token_branch]
 
@@ -114,6 +122,8 @@ class MIXDETRMB(OneStageModel):
         box_cls = output["pred_logits"]
         box_pred = output["pred_boxes"]
         image_sizes = [img_meta["img_shape"] for img_meta in img_metas]
+        if box_cls is None:
+            return dict(pred_bboxes=None, pred_masks=None, predict_classes=None)
         results = self.head.inference(box_cls, box_pred, image_sizes)
         # processed_results = []
         pred_bboxes = []
@@ -142,4 +152,33 @@ class MIXDETRMB(OneStageModel):
         pred_masks = None
         return dict(pred_bboxes=pred_bboxes, pred_masks=pred_masks, predict_classes=predict_classes)
     
-    
+    def get_predictions_grec(self, output, img_metas, rescale=False):
+        box_cls = output["pred_logits"]
+        box_pred = output["pred_boxes"]
+        image_sizes = [img_meta["img_shape"] for img_meta in img_metas]
+        if box_cls is None:
+            return dict(pred_bboxes=None, pred_masks=None, predict_classes=None)
+        results = self.head.inference(box_cls, box_pred, image_sizes)
+        # processed_results = []
+        pred_bboxes = []
+        for results_per_image, img_meta in zip(results, img_metas):
+            image_size = img_meta["img_shape"]
+            height = image_size[0]
+            width = image_size[1]
+            r = detector_postprocess(results_per_image, height, width)
+            # infomation extract
+            pred_box = r.pred_boxes.tensor
+            score = r.scores
+            pred_class = r.pred_classes
+            if rescale:
+                scale_factors = img_meta["scale_factor"]
+                pred_box /= pred_box.new_tensor(scale_factors)
+            cur_predict_dict = {
+                "boxes":pred_box,
+                "scores":score,
+                "labels":pred_class
+            }
+            pred_bboxes.append(cur_predict_dict)
+            # processed_results.append({"instances": r})
+        pred_masks = None
+        return dict(pred_bboxes=pred_bboxes, pred_masks=pred_masks)

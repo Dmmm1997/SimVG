@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "1" },
       "args": [
-        "configs/paper_exp/0323/ViTBaseP32-1.0decoder-30ep-512hw-tgqg3-refcocounc.py",
+        "configs/paper_exp/sota_model/phrase/noema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2_flickr30k.py",
         // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
         "--work-dir",
         "work_dir/debug/test"
@@ -38,8 +38,6 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif/20240314_150703/20240314_150703_(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif.py",
-        "work_dir/beit3_distill_314/(3-14)-noema-1.0decoder#1.0token#texaug#loadpretrain#share_predicthead_schedulerdif/20240314_150703/det_best.pth",
         "--output-dir",
         "visualization/inference"
       ]

@@ -71,14 +71,14 @@ def accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=None, device="c
     eval_det = pred_bboxes is not None
     eval_mask = pred_masks is not None
 
-    det_acc = torch.tensor([-1.0], device=device)
-    bbox_iou = torch.tensor([-1.0], device=device)
+    det_acc = torch.tensor([0.0], device=device)
+    bbox_iou = torch.tensor([0.0], device=device)
     if eval_det:
         gt_bbox = torch.stack(gt_bbox).to(device)
         bbox_iou = bbox_overlaps(gt_bbox, pred_bboxes, is_aligned=True)
         det_acc = (bbox_iou >= 0.5).float().mean()
 
-    mask_iou = torch.tensor([-1.0], device=device)
+    mask_iou = torch.tensor([0.0], device=device)
     mask_acc_at_thrs = torch.full((5,), -1.0, device=device)
     if eval_mask:
         mask_iou = mask_overlaps(gt_mask, pred_masks, is_crowd).to(device)
@@ -97,6 +97,8 @@ def grec_evaluate_f1_nacc(predictions, gt_bboxes, targets, thresh_score=0.7, thr
         "FP": torch.tensor(0.0, device=device),
         "FN": torch.tensor(0.0, device=device),
     }
+    if predictions is None:
+        return torch.tensor(0.0, device=device).float(), torch.tensor(0.0, device=device).float()
     for prediction, gt_bbox, target in zip(predictions, gt_bboxes, targets):
         TP = 0
         assert prediction is not None
