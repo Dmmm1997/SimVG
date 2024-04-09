@@ -1,9 +1,9 @@
 _base_ = [
-    "../../_base_/datasets/detection/mixed_coco_all.py",
-    "../../_base_/misc.py",
+    "../../../_base_/datasets/detection/refcocog-umd.py",
+    "../../../_base_/misc.py",
 ]
 
-dataset = 'Mixed'
+dataset = 'RefCOCOgUMD'
 max_token = 20
 img_size = 640
 
@@ -17,7 +17,7 @@ train_pipeline = [
         dataset=dataset,
         use_token_type="beit3",
     ),
-    # dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
+    dict(type="LargeScaleJitter", out_max_size=img_size, jitter_min=0.3, jitter_max=1.4),
     dict(type="Resize", img_scale=(img_size, img_size), keep_ratio=False),
     dict(type="Normalize", **img_norm_cfg),
     dict(type="Pad", size_divisor=32),
@@ -55,13 +55,10 @@ data = dict(
     train=dict(
         pipeline=train_pipeline,
     ),
-    val_refcoco_unc=dict(
+    val=dict(
         pipeline=val_pipeline,
     ),
-    val_refcocoplus_unc=dict(
-        pipeline=test_pipeline,
-    ),
-    val_refcocog_umd=dict(
+    test=dict(
         pipeline=test_pipeline,
     )
 )
@@ -100,7 +97,8 @@ model = dict(
         share_predicthead=False,
         num_token_mlp_layers=1,
         mlp_aux_loss=False,
-        text_guided_query_generation=False
+        text_guided_query_generation=True,
+        num_tgqg_layers=2
     ),
 )
 
@@ -110,7 +108,7 @@ ema = False
 # work_dir = "work_dir/seqtr_det_refcoco-unc_pvtv2mmb1_mix_type1_detectionpretrain_nofreeze_fusionv3_lr0.0003_ema_ep30"
 # work_dir = "work_dir/pretrain_exp/ema#1.0decoder#1.0token"
 
-lr = 0.0003
+lr = 0.0001
 optimizer_config = dict(
     type="Adam",
     lr=lr,
@@ -125,9 +123,11 @@ optimizer_config = dict(
 scheduler_config = dict(
     type="MultiStepLRWarmUp",
     warmup_epochs=3,
-    decay_steps=[21,27],
+    decay_steps=[8],
     decay_ratio=0.1,
-    max_epoch=30,
+    max_epoch=10,
 )
 
 log_interval = 50
+
+finetune_from="work_dir/paper_exp/pretrain/noema#1.0decoder-tgqg-640/20240324_221216/det_best.pth"

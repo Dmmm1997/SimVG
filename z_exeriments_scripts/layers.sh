@@ -1,4 +1,4 @@
-# exp decoder layers
+wokeyi# exp decoder layers
 # source_dir=configs/paper_exp/decoder_ablation/layers
 # file_names=$(ls $source_dir)
 # for file_name in $file_names
