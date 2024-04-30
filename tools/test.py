@@ -1,10 +1,10 @@
 import argparse
 import torch.distributed as dist
 
-from seqtr.apis import evaluate_model, set_random_seed
-from seqtr.datasets import build_dataset, build_dataloader
-from seqtr.models import build_model, ExponentialMovingAverage
-from seqtr.utils import (get_root_logger, load_checkpoint, init_dist, 
+from simvg.apis import evaluate_model, set_random_seed
+from simvg.datasets import build_dataset, build_dataloader
+from simvg.models import build_model, ExponentialMovingAverage
+from simvg.utils import (get_root_logger, load_checkpoint, init_dist, 
                          is_main, load_pretrained_checkpoint)
 
 from mmcv.runner import get_dist_info

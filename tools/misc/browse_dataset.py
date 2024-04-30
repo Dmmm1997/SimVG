@@ -10,7 +10,7 @@ from mmcv import Config, DictAction
 
 from mmdet.core.utils import mask2ndarray
 from mmdet.core.visualization import imshow_det_bboxes, imshow_gt_det_bboxes
-from seqtr.datasets.builder import build_dataset
+from simvg.datasets.builder import build_dataset
 from mmdet.utils import replace_cfg_vals, update_data_root
 
 

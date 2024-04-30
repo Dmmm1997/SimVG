@@ -4,7 +4,7 @@ for file_name in $file_names
 do
   related_filename=$source_dir/$file_name
   # train
-  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 PORT=29500 bash tools/dist_train.sh $related_filename 2
+  CUDA_VISIBLE_DEVICES=0,1 PORT=29500 bash tools/dist_train.sh $related_filename 2
 
   # test -----
   # basename without .py
@@ -16,6 +16,6 @@ do
   # checkpoint=$checkpoint_dir/$latest_folder/det_best.pth
   checkpoint=$checkpoint_dir/$latest_folder/latest.pth
   echo $checkpoint
-  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 PORT=29510 bash tools/dist_test.sh $related_filename 2 --load-from $checkpoint
+  CUDA_VISIBLE_DEVICES=0,1 PORT=29510 bash tools/dist_test.sh $related_filename 2 --load-from $checkpoint
   # test -----
 done

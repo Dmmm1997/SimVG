@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 
 from mmcv.runner import load_checkpoint
-from seqtr.datasets.pipelines import Compose
-from seqtr.datasets import extract_data
+from simvg.datasets.pipelines import Compose
+from simvg.datasets import extract_data
 from mmcv.parallel import collate
 from mmcv.parallel import collate, scatter
 from mmcv.ops import RoIPool
@@ -11,9 +11,9 @@ from mmcv import Config
 import random
 import argparse
 import os
-from seqtr.models import build_model
+from simvg.models import build_model
 
-from seqtr.utils.gradcam_models import GradCAM_BeiT
+from simvg.utils.gradcam_models import GradCAM_BeiT
 
 np.random.seed(300)
 

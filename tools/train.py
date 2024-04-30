@@ -8,11 +8,11 @@ from mmcv import Config, DictAction
 from mmcv.runner import get_dist_info
 from mmcv.parallel import MMDistributedDataParallel
 
-from seqtr.core import build_optimizer, build_scheduler
-from seqtr.datasets import build_dataset, build_dataloader
-from seqtr.models import build_model, ExponentialMovingAverage
-from seqtr.apis import set_random_seed, train_model, evaluate_model
-from seqtr.utils import get_root_logger, load_checkpoint, save_checkpoint, load_pretrained_checkpoint, is_main, init_dist
+from simvg.core import build_optimizer, build_scheduler
+from simvg.datasets import build_dataset, build_dataloader
+from simvg.models import build_model, ExponentialMovingAverage
+from simvg.apis import set_random_seed, train_model, evaluate_model
+from simvg.utils import get_root_logger, load_checkpoint, save_checkpoint, load_pretrained_checkpoint, is_main, init_dist
 
 import warnings
 

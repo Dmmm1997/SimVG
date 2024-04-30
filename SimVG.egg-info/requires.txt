@@ -1,14 +1,11 @@
-# apex
 mmdet==2.28.1
-# mmcv-full==1.7.2
 pydantic
-pycocotools; platform_system == "Linux"
 torch
 numpy
 ninja
 transformers
 wandb
-timm==0.9.16
+timm
 fairscale
 einops
 torchscale
@@ -17,4 +14,6 @@ SentencePiece
 fvcore
 cloudpickle
 omegaconf
-# https://github.com/facebookresearch/detectron2.git
+
+[:platform_system == "Linux"]
+pycocotools

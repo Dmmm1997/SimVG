@@ -8,7 +8,7 @@ def readme():
     return content
 
 
-version_file = 'seqtr/version.py'
+version_file = 'simvg/version.py'
 
 
 def get_version():
@@ -94,9 +94,9 @@ def parse_requirements(fname='requirements.txt', with_version=True):
 
 if __name__ == '__main__':
     setup(
-        name='SeqTR',
+        name='SimVG',
         version=get_version(),
-        description='SeqTR: A Simple yet Universal Network for Visual Grounding.',
+        description='',
         long_description=readme(),
         long_description_content_type='text/markdown',
         author='sean zhuh',

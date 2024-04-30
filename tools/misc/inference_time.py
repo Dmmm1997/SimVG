@@ -2,11 +2,11 @@
 import argparse
 import torch
 from thop import profile, clever_format
-from seqtr.models import build_model
+from simvg.models import build_model
 import time
 from mmcv import Config, DictAction
-from seqtr.datasets import build_dataset, build_dataloader
-from seqtr.datasets import extract_data
+from simvg.datasets import build_dataset, build_dataloader
+from simvg.datasets import extract_data
 from tqdm import tqdm
 
 def calc_flops_params(model,

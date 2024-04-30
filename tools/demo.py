@@ -4,13 +4,13 @@ from argparse import ArgumentParser
 
 from mmdet.apis import inference_detector, show_result_pyplot
 from mmcv.utils import Config
-from seqtr.models import build_model
-from seqtr.utils import load_checkpoint
-from seqtr.datasets.pipelines import Compose
-from seqtr.datasets import extract_data
+from simvg.models import build_model
+from simvg.utils import load_checkpoint
+from simvg.datasets.pipelines import Compose
+from simvg.datasets import extract_data
 from mmcv.parallel import collate
 import os
-from seqtr.core import imshow_expr_bbox
+from simvg.core import imshow_expr_bbox
 
 
 def parse_args():
