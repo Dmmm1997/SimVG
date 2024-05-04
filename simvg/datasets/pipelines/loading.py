@@ -68,6 +68,7 @@ class LoadImageAnnotationsFromFile(object):
             "ReferItGameBerkeley",
             "Flickr30k",
             "Mixed",
+            "MixedSeg"
         ]
         self.dataset = dataset
         self.use_token_type = use_token_type
@@ -95,7 +96,7 @@ class LoadImageAnnotationsFromFile(object):
             filepath = osp.join(
                 results["imgsfile"], "%d.jpg" % results["ann"]["image_id"]
             )
-        elif "RefCOCO" in self.dataset:
+        elif "RefCOCO" in self.dataset or "MixedSeg"==self.dataset:
             filepath = osp.join(
                 results["imgsfile"],
                 "COCO_train2014_%012d.jpg" % results["ann"]["image_id"],

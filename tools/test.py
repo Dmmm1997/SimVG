@@ -25,7 +25,7 @@ def main_worker(cfg):
     cfg.rank, cfg.world_size = get_dist_info()
     if is_main():
         logger = get_root_logger(log_file=os.path.join(os.path.dirname(cfg.load_from),"test_log.txt"))
-        logger = get_root_logger()
+        # logger = get_root_logger()
         logger.info(cfg.pretty_text)
 
     if cfg.dataset == "Mixed":
@@ -42,6 +42,29 @@ def main_worker(cfg):
                         cfg.data.val_refcocog_umd,
                         # cfg.data.val_referitgame_berkeley,
                         # cfg.data.val_flickr30k
+                        ]
+    elif cfg.dataset == "MixedSeg":
+        prefix = [
+                  'val_refcoco_unc', 
+                  'testA_refcoco_unc', 
+                  'testB_refcoco_unc', 
+                  'val_refcocoplus_unc', 
+                  'testA_refcocoplus_unc', 
+                  'testB_refcocoplus_unc', 
+                  'val_refcocog_umd',
+                  'test_refcocog_umd',
+                  'val_refcocog_google',
+                  ]
+        datasets_cfgs = [cfg.data.train,
+                        cfg.data.val_refcoco_unc,
+                        cfg.data.testA_refcoco_unc,
+                        cfg.data.testB_refcoco_unc,
+                        cfg.data.val_refcocoplus_unc,
+                        cfg.data.testA_refcocoplus_unc,
+                        cfg.data.testB_refcocoplus_unc,
+                        cfg.data.val_refcocog_umd,
+                        cfg.data.test_refcocog_umd,
+                        cfg.data.val_refcocog_google,
                         ]
     else:
         prefix = ['val']
@@ -78,12 +101,12 @@ def main_worker(cfg):
     for eval_loader, _prefix in zip(dataloaders, prefix):
         if is_main():
             logger = get_root_logger()
-            logger.info(f"SeqTR - evaluating set {_prefix}")
+            logger.info(f"SimVG - evaluating set {_prefix}")
         evaluate_model(-1, cfg, model, eval_loader)
         if cfg.ema:
             if is_main():
                 logger = get_root_logger()
-                logger.info(f"SeqTR - evaluating set {_prefix} using ema")
+                logger.info(f"SimVG - evaluating set {_prefix} using ema")
             model_ema.apply_shadow()
             evaluate_model(-1, cfg, model, eval_loader)
             model_ema.restore()

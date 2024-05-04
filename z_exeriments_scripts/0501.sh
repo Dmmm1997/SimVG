@@ -1,8 +1,7 @@
-source_dir=configs/paper_exp/sota_model/sota_large
-file_names=$(ls $source_dir)
-for file_name in $file_names
+
+file_names=('configs/segmentation/beit3/beit3-seg_512_refcoco-unc.py' 'configs/segmentation/seqtr/seqtr_segm_refcoco-unc.py')
+for related_filename in $file_names
 do
-  related_filename=$source_dir/$file_name
   # train
   CUDA_VISIBLE_DEVICES=0,1 PORT=29500 bash tools/dist_train.sh $related_filename 2
 

@@ -1,14 +1,15 @@
 dataset = 'RefCOCOUNC'
 data_root = './data/'
 img_norm_cfg = dict(
-    mean=[0., 0., 0.], std=[1., 1., 1.])
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375])
 
 train_pipeline = [
     dict(type='LoadImageAnnotationsFromFile',
          max_token=15, with_mask=True, dataset="RefCOCOUNC"),
-    dict(type='LargeScaleJitter', out_max_size=640,
+    dict(type='LargeScaleJitter', out_max_size=512,
          jitter_min=0.3, jitter_max=1.4),
     # dict(type='Resize', img_scale=(640, 640)),
+    dict(type='Resize', img_scale=(512, 512), keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='SampleMaskVertices', num_ray=18, center_sampling=False),
@@ -20,7 +21,7 @@ train_pipeline = [
 val_pipeline = [
     dict(type='LoadImageAnnotationsFromFile',
          max_token=15, with_mask=True, dataset="RefCOCOUNC"),
-    dict(type='Resize', img_scale=(640, 640)),
+    dict(type='Resize', img_scale=(512, 512), keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),

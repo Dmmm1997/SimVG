@@ -8,7 +8,8 @@ from simvg.utils import get_root_logger, reduce_mean, is_main
 from torchvision.ops.boxes import box_area
 from mmdet.core.bbox.iou_calculators.iou2d_calculator import bbox_overlaps
 from collections import defaultdict
-
+from mmdet.core import BitmapMasks
+import numpy as np
 
 def mask_overlaps(gt_mask, pred_masks, is_crowd):
     """Args:
@@ -23,8 +24,19 @@ def mask_overlaps(gt_mask, pred_masks, is_crowd):
 
     mask_iou = computeIoU_RLE(gt_mask, pred_masks, is_crowd)
     mask_iou = torch.from_numpy(mask_iou)
-
+    
     return mask_iou
+
+
+def mask_overlaps_withIU(gt_masks, pred_masks):
+    # decode the mask
+    pred_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in pred_masks],dim=0)
+    gt_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in gt_masks],dim=0)
+    # pred_mask = pred_mask.argmax(1)
+    intersection = torch.sum(torch.mul(pred_mask, gt_mask).reshape(pred_mask.shape[0], -1), dim=-1).cuda()
+    union = torch.sum(torch.add(pred_mask, gt_mask).reshape(pred_mask.shape[0],-1), dim=1).cuda() - intersection
+    iou = torch.tensor([i/u if u>=1 else 0 for i,u in zip(intersection, union)]).cuda()
+    return iou, intersection, union
 
 
 def box_iou(boxes1, boxes2):
@@ -80,12 +92,14 @@ def accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=None, device="c
 
     mask_iou = torch.tensor([0.0], device=device)
     mask_acc_at_thrs = torch.full((5,), -1.0, device=device)
+    I,U = torch.tensor([0.0], device=device), torch.tensor([0.0], device=device)
     if eval_mask:
-        mask_iou = mask_overlaps(gt_mask, pred_masks, is_crowd).to(device)
+        # mask_iou = mask_overlaps(gt_mask, pred_masks, is_crowd).to(device)
+        mask_iou, I, U = mask_overlaps_withIU(gt_mask, pred_masks)
         for i, iou_thr in enumerate([0.5, 0.6, 0.7, 0.8, 0.9]):
             mask_acc_at_thrs[i] = (mask_iou >= iou_thr).float().mean()
 
-    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0
+    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0, I*100.0, U*100.0
 
 
 def grec_evaluate_f1_nacc(predictions, gt_bboxes, targets, thresh_score=0.7, thresh_iou=0.5, thresh_F1=1.0, device="cuda:0"):
@@ -172,13 +186,7 @@ def evaluate_model(epoch, cfg, model, loader):
     end = time.time()
 
     with_bbox, with_mask = False, False
-    det_acc_list, mask_iou_list, mask_acc_list, f1_score_list, n_acc_list = (
-        defaultdict(list),
-        defaultdict(list),
-        defaultdict(list),
-        defaultdict(list),
-        defaultdict(list),
-    )
+    det_acc_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list= [], [], [], [], []
     with torch.no_grad():
         for batch, inputs in enumerate(loader):
             gt_bbox, gt_mask, is_crowd = None, None, None
@@ -209,85 +217,41 @@ def evaluate_model(epoch, cfg, model, loader):
                 with_mask=with_mask,
             )
 
-            if not isinstance(predictions, list):
-                predictions_list = [predictions]
-            else:
-                predictions_list = predictions
+            pred_bboxes = predictions.pop("pred_bboxes")
+            pred_masks = predictions.pop("pred_masks")
 
-            # statistics informations
-            map_dict = {0: "decoder", 1: "token"}
-            det_acc_dict, f1_score_acc_dict, n_acc_dict = {}, {}, {}
-            for ind, predictions in enumerate(predictions_list):
-                predict_type = map_dict[ind]
-                pred_bboxes = predictions.pop("pred_bboxes")
-                pred_masks = predictions.pop("pred_masks")
-                if not cfg["dataset"] == "GRefCOCO":
-                    with torch.no_grad():
-                        batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs = accuracy(
-                            pred_bboxes,
-                            gt_bbox,
-                            pred_masks,
-                            gt_mask,
-                            is_crowd=is_crowd,
-                            device=device,
-                        )
-                        if cfg.distributed:
-                            batch_det_acc = reduce_mean(batch_det_acc)
-                            # batch_mask_iou = reduce_mean(batch_mask_iou)
-                            # batch_mask_acc_at_thrs = reduce_mean(batch_mask_acc_at_thrs)
-                    det_acc_list[predict_type].append(batch_det_acc.item())
-                    det_acc = sum(det_acc_list[predict_type]) / len(det_acc_list[predict_type])
-                    det_acc_dict[predict_type] = det_acc
-                else:
-                    targets = [meta["target"] for meta in img_metas]
-                    with torch.no_grad():
-                        batch_f1_score, batch_n_acc = grec_evaluate_f1_nacc(pred_bboxes, gt_bbox, targets, device=device)
-                        if cfg.distributed:
-                            batch_f1_score = reduce_mean(batch_f1_score)
-                            batch_n_acc = reduce_mean(batch_n_acc)
-                    f1_score_list[predict_type].append(batch_f1_score.item())
-                    n_acc_list[predict_type].append(batch_n_acc.item())
-                    f1_score_acc = sum(f1_score_list[predict_type]) / len(f1_score_list[predict_type])
-                    n_acc = sum(n_acc_list[predict_type]) / len(n_acc_list[predict_type])
-                    f1_score_acc_dict[predict_type] = f1_score_acc
-                    n_acc_dict[predict_type] = n_acc
+            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device)
+            if cfg.distributed:
+                batch_det_acc = reduce_mean(batch_det_acc)
+                batch_mask_iou = reduce_mean(batch_mask_iou)
+                batch_mask_I = reduce_mean(batch_mask_I)
+                batch_mask_U = reduce_mean(batch_mask_U)
+                batch_mask_acc_at_thrs = reduce_mean(batch_mask_acc_at_thrs)
 
-            # logging informations
-            if is_main() and ((batch + 1) % cfg.log_interval == 0 or batch + 1 == batches):
-                logger = get_root_logger()
+            det_acc_list.append(batch_det_acc.item())
+            mask_iou_list.append(batch_mask_iou)
+            mask_I_list.append(batch_mask_I)
+            mask_U_list.append(batch_mask_U)
+            mask_acc_list.append(batch_mask_acc_at_thrs)
 
-                if not cfg["dataset"] == "GRefCOCO":
-                    ACC_str_list = [
-                        "{}Det@.5: {:.2f}, ".format(map_dict[i], det_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
-                    ]
-                    ACC_str = "".join(ACC_str_list)
-                    logger.info(f"val - epoch [{epoch+1}]-[{batch+1}/{batches}] " + f"time: {(time.time()- end):.2f}, " + ACC_str)
-                    
-                else:
-                    F1_Score_str_list = [
-                        "{}_f1_score: {:.2f}, ".format(map_dict[i], f1_score_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
-                    ]
-                    n_acc_str_list = [
-                        "{}_n_acc: {:.2f}, ".format(map_dict[i], n_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
-                    ]
-                    F1_Score_str = "".join(F1_Score_str_list)
-                    n_acc_str = "".join(n_acc_str_list)
+            det_acc = sum(det_acc_list) / len(det_acc_list)
+            mask_miou = torch.cat(mask_iou_list).mean().item()
+            mask_I = torch.cat(mask_I_list).mean().item()
+            mask_U = torch.cat(mask_U_list).mean().item()
+            mask_oiou = 100.0 * mask_I / mask_U
+            mask_acc = torch.vstack(mask_acc_list).mean(dim=0).tolist()
+            if is_main():
+                if (batch + 1) % cfg.log_interval == 0 or batch + 1 == batches:
+                    logger = get_root_logger()
                     logger.info(
-                        f"Validate - epoch [{epoch+1}]-[{batch+1}/{batches}] "
-                        + f"time: {(time.time()- end):.2f}, "
-                        + F1_Score_str
-                        + n_acc_str
+                        f"validate - epoch [{epoch+1}]-[{batch+1}/{batches}] "
+                        + f"time: {(time.time() - end):.2f}, "
+                        + f"DetACC@0.5: {det_acc:.2f}, "
+                        + f"mIoU: {mask_miou:.2f}, "
+                        + f"oIoU: {mask_oiou:.2f},"
+                        + f"MaskACC@0.5-0.9: [{mask_acc[0]:.2f}, {mask_acc[1]:.2f}, {mask_acc[2]:.2f},  {mask_acc[3]:.2f},  {mask_acc[4]:.2f}]"
                     )
-            
 
             end = time.time()
-    
-    if not cfg["dataset"] == "GRefCOCO":
-        det_acc = sum(list(det_acc_dict.values())) / len(det_acc_dict)
-        mask_iou = 0
-    else:
-        det_acc = sum(list(f1_score_acc_dict.values())) / len(f1_score_acc_dict)
-        mask_iou = sum(list(n_acc_dict.values())) / len(n_acc_dict)
-        
 
-    return det_acc, mask_iou
+    return det_acc, (mask_miou+mask_oiou)/2

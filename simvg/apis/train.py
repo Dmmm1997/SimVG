@@ -45,7 +45,8 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
     batches = len(loader)
     end = time.time()
 
-    loss_det_list, det_acc_list, n_acc_list, f1_score_list = (defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list))
+    det_acc_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list = [], [], [], [], []
+    loss_det_list, loss_mask_list = [], []
     for batch, inputs in enumerate(loader):
         data_time = time.time() - end
         gt_bbox, gt_mask, is_crowd = None, None, None
@@ -69,7 +70,7 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
 
         losses, predictions = model(**inputs, rescale=False)
 
-        loss_det = losses.get("loss_total", torch.tensor([0.0], device=device))
+        loss_det = losses.get("loss_det", torch.tensor([0.0], device=device))
         loss_mask = losses.pop("loss_mask", torch.tensor([0.0], device=device))
         loss = loss_det + loss_mask
         optimizer.zero_grad()
@@ -85,92 +86,49 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
         if cfg.ema:
             model_ema.update_params()
 
-        # if cfg.distributed:
-        #     loss_det = reduce_mean(loss_det)
-        #     loss_mask = reduce_mean(loss_mask)
+        if cfg.distributed:
+            loss_det = reduce_mean(loss_det)
+            loss_mask = reduce_mean(loss_mask)
 
-        if not isinstance(predictions, list):
-            predictions_list = [predictions]
-        else:
-            predictions_list = predictions
-            
-        # statistics loss
-        for loss_name, loss_value in losses.items():
+        pred_bboxes = predictions.pop("pred_bboxes")
+        pred_masks = predictions.pop("pred_masks")
+
+        with torch.no_grad():
+            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device)
             if cfg.distributed:
-                loss_value = reduce_mean(loss_value)
-            loss_det_list[loss_name].append(loss_value.item())
-        
+                batch_det_acc = reduce_mean(batch_det_acc)
+                batch_mask_iou = reduce_mean(batch_mask_iou)
+                batch_mask_I = reduce_mean(batch_mask_I)
+                batch_mask_U = reduce_mean(batch_mask_U)
+                batch_mask_acc_at_thrs = reduce_mean(batch_mask_acc_at_thrs)
 
-        # statistics informations
-        map_dict = {0: "decoder", 1: "token"}
-        det_acc_dict, f1_score_acc_dict, n_acc_dict = {}, {}, {}
-        for ind, predictions in enumerate(predictions_list):
-            predict_type = map_dict[ind]
-            pred_bboxes = predictions.pop("pred_bboxes")
-            pred_masks = predictions.pop("pred_masks")
-            if not cfg["dataset"] == "GRefCOCO":
-                with torch.no_grad():
-                    batch_det_acc, _, _ = accuracy(
-                        pred_bboxes,
-                        gt_bbox,
-                        pred_masks,
-                        gt_mask,
-                        is_crowd=is_crowd,
-                        device=device,
-                    )
-                    if cfg.distributed:
-                        batch_det_acc = reduce_mean(batch_det_acc)
-                det_acc_list[predict_type].append(batch_det_acc.item())
-                # loss_det_list[predict_type].append(loss_det.item())
-                det_acc = sum(det_acc_list[predict_type]) / len(det_acc_list[predict_type])
-                det_acc_dict[predict_type] = det_acc
-            else:
-                targets = [meta["target"] for meta in img_metas]
-                with torch.no_grad():
-                    batch_f1_score, batch_n_acc = grec_evaluate_f1_nacc(pred_bboxes, gt_bbox, targets, device=device)
-                    if cfg.distributed:
-                        batch_f1_score = reduce_mean(batch_f1_score)
-                        batch_n_acc = reduce_mean(batch_n_acc)
-                f1_score_list[predict_type].append(batch_f1_score.item())
-                n_acc_list[predict_type].append(batch_n_acc.item())
-                # loss_det_list[predict_type].append(loss_det.item())
-                f1_score_acc = sum(f1_score_list[predict_type]) / len(f1_score_list[predict_type])
-                n_acc = sum(n_acc_list[predict_type]) / len(n_acc_list[predict_type])
-                f1_score_acc_dict[predict_type] = f1_score_acc
-                n_acc_dict[predict_type] = n_acc
+        det_acc_list.append(batch_det_acc.item())
+        mask_iou_list.append(batch_mask_iou)
+        mask_acc_list.append(batch_mask_acc_at_thrs)
+        loss_det_list.append(loss_det.item())
+        loss_mask_list.append(loss_mask.item())
+        mask_I_list.append(batch_mask_I)
+        mask_U_list.append(batch_mask_U)
 
-        # logging informations
-        if is_main() and ((batch + 1) % cfg.log_interval == 0 or batch + 1 == batches):
-            loss_str_list = ["{}:{:.3f}".format(loss_n.split("loss_")[-1], sum(loss_v)/len(loss_v)) for loss_n, loss_v in loss_det_list.items()]
-            loss_str =  "loss:["+" ".join(loss_str_list) +"]"
-            logger = get_root_logger()
-            if not cfg["dataset"] == "GRefCOCO":
-                ACC_str_list = ["{}Acc:{:.2f}, ".format(map_dict[i], det_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
-                ACC_str = "".join(ACC_str_list)
+        det_acc = sum(det_acc_list) / len(det_acc_list)
+        mask_miou = torch.cat(mask_iou_list).mean().item()
+        mask_I = torch.cat(mask_I_list).mean().item()
+        mask_U = torch.cat(mask_U_list).mean().item()
+        mask_oiou = 100.0 * mask_I / mask_U
+        mask_acc = torch.vstack(mask_acc_list).mean(dim=0).tolist()
+        if is_main():
+            if (batch + 1) % cfg.log_interval == 0 or batch + 1 == batches:
+                logger = get_root_logger()
                 logger.info(
-                    f"train-epoch[{epoch+1}]-[{batch+1}/{batches}] "
-                    + f"time:{(time.time()- end):.2f}, data_time: {data_time:.2f}, "
-                    # + f"loss_det:{sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
-                    + f"{loss_str}, "
-                    + f"lr:{optimizer.param_groups[0]['lr']:.6f}, "
-                    # + f"DetACC@0.5: {det_acc:.2f}, "
-                    + ACC_str
-                )
-            else:
-                F1_Score_str_list = [
-                    "{}_f1: {:.2f}, ".format(map_dict[i], f1_score_acc_dict[map_dict[i]]) for i in range(len(predictions_list))
-                ]
-                n_acc_str_list = ["{}_Nacc: {:.2f}, ".format(map_dict[i], n_acc_dict[map_dict[i]]) for i in range(len(predictions_list))]
-                F1_Score_str = "".join(F1_Score_str_list)
-                n_acc_str = "".join(n_acc_str_list)
-                logger.info(
-                    f"train-epoch[{epoch+1}]-[{batch+1}/{batches}] "
-                    + f"time:{(time.time()- end):.2f}, data_time: {data_time:.2f}, "
-                    # + f"loss_det:{sum(loss_det_list[predict_type]) / len(loss_det_list[predict_type]) :.4f}, "
-                    +f"{loss_str}, "
-                    + f"lr:{optimizer.param_groups[0]['lr']:.6f}, "
-                    + F1_Score_str
-                    + n_acc_str
+                    f"train - epoch [{epoch+1}]-[{batch+1}/{batches}] "
+                    + f"time: {(time.time()- end):.2f}, data_time: {data_time:.2f}, "
+                    + f"loss_det: {sum(loss_det_list) / len(loss_det_list) :.4f}, "
+                    + f"loss_mask: {sum(loss_mask_list) / len(loss_mask_list):.4f}, "
+                    + f"lr: {optimizer.param_groups[0]['lr']:.6f}, "
+                    + f"DetACC@0.5: {det_acc:.2f}, "
+                    + f"mIoU: {mask_miou:.2f}, "
+                    + f"oIoU: {mask_oiou:.2f}, "
+                    + f"MaskACC@0.5-0.9: [{mask_acc[0]:.2f}, {mask_acc[1]:.2f}, {mask_acc[2]:.2f},  {mask_acc[3]:.2f},  {mask_acc[4]:.2f}]"
                 )
 
         end = time.time()

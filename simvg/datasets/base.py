@@ -22,8 +22,8 @@ class BaseDataset(Dataset):
         super(BaseDataset, self).__init__()
         assert isinstance(which_set, str) and which_set in [
             'train', 'val', 'testA', 'testB', 'test',
-            'val_refcoco_unc', 'val_refcocoplus_unc', 'val_refcocog_umd',
-            'val_flickr30k', 'val_referitgame_berkeley']
+            'val_refcoco_unc','testA_refcoco_unc','testB_refcoco_unc', 'val_refcocoplus_unc', 'testA_refcocoplus_unc', 'testB_refcocoplus_unc', 'val_refcocog_umd', 'test_refcocog_umd',
+            'val_flickr30k', 'val_referitgame_berkeley', 'val_refcocog_google']
         self.which_set = which_set
         if len(img_source) == 1:
             assert img_source[0] in ['coco', 'visual-genome', 'flickr', 'saiaprtc12']
@@ -169,6 +169,17 @@ class Mixed(BaseDataset):
     def __init__(self, *args, **kwargs):
         which_set = kwargs['which_set']
         super(Mixed, self).__init__(*args, **kwargs)
+
+        if is_main():
+            logger = get_root_logger()
+            logger.info(f'Mixed-{which_set} size: {len(self)}')
+            logger.info(f'Mixed tokens: {len(self.token2idx)}')
+            
+@DATASETS.register_module()
+class MixedSeg(BaseDataset):
+    def __init__(self, *args, **kwargs):
+        which_set = kwargs['which_set']
+        super(MixedSeg, self).__init__(*args, **kwargs)
 
         if is_main():
             logger = get_root_logger()
