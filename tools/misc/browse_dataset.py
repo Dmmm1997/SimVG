@@ -12,6 +12,9 @@ from mmdet.core.utils import mask2ndarray
 from mmdet.core.visualization import imshow_det_bboxes, imshow_gt_det_bboxes
 from simvg.datasets.builder import build_dataset
 from mmdet.utils import replace_cfg_vals, update_data_root
+import pycocotools.mask as maskUtils
+from mmdet.core import BitmapMasks
+
 
 
 def parse_args():
@@ -26,7 +29,7 @@ def parse_args():
     )
     parser.add_argument(
         "--output-dir",
-        default="visualization/grefcoco_val",
+        default="visualization/seqtr_dataset_browse",
         type=str,
         help="If there is no display interface, you can save it",
     )
@@ -94,12 +97,18 @@ def main():
             if args.output_dir is not None
             else None
         )
-
-        gt_bboxes = np.stack(item["gt_bbox"], axis=0).reshape(-1, 4)
-        gt_labels = np.zeros([gt_bboxes.shape[0]], dtype=np.int64)
-        gt_masks = item.get("gt_masks", None)
+        gt_bboxes = item.get("gt_bbox", None)
+        if gt_bboxes is not None:
+            gt_bboxes = np.stack(item["gt_bbox"], axis=0).reshape(-1, 4)
+            gt_labels = np.zeros([gt_bboxes.shape[0]], dtype=np.int64)
+            
+        gt_masks = item.get("gt_mask_rle", None)
         if gt_masks is not None:
+            gt_masks = maskUtils.decode(gt_masks)
+            h,w = gt_masks.shape
+            gt_masks = BitmapMasks(gt_masks[None], h, w)
             gt_masks = mask2ndarray(gt_masks)
+            gt_labels = np.zeros([gt_masks.shape[0]], dtype=np.int64)
 
         expression = item["img_metas"].data["expression"]
 

@@ -7,13 +7,15 @@
       "request": "launch",
       "program": "${workspaceFolder}/tools/train.py",
       "console": "integratedTerminal",
-      "justMyCode": false,
-      "env": { "CUDA_VISIBLE_DEVICES": "1" },
+      "justMyCode": true,
+      "env": { "CUDA_VISIBLE_DEVICES": "0" },
       "args": [
-        "configs/segmentation/beit3/beit3-seg_512_refcoco-unc.py",
-        // "configs/segmentation/pretrain/beit3-seg_640_mixcoco_ep30.py",
+        "configs/segmentation/ablation_setting_select/decoder/cls_token_seg.py",
+        // "configs/segmentation/pretrain/beit3-mask-seg_512_mixcoco.py",
         "--work-dir",
-        "work_dir/debug/test"
+        "work_dir/debug/test",
+        "--debug",
+        "True",
         // "--load-from", "work_dir/beit3_multibranch/(3-9)decodergt#0decoderpredict#0tokengt_30ep_noweight/20240310_095533/det_best.pth"
       ]
     },
@@ -25,9 +27,9 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "configs/segmentation/pretrain/beit3-seg_640_mixcoco_test.py",
+        "work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/20240505_141258_beit3-mask-seg_512_mixcoco.py",
         "--load-from",
-        "work_dir/segmentation/pretrain/beit3-seg_640_mixcoco_ep30/20240502_001644/segm_best.pth"
+        "work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/segm_best.pth"
       ]
     },
     {
@@ -49,9 +51,6 @@
       "program": "${file}",
       "console": "integratedTerminal",
       "justMyCode": true,
-      // "args": [
-      //   "configs/beit3/detection/diff_head/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq1.py"
-      // ]
     },
     {
       "name": "gradcam",

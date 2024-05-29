@@ -80,7 +80,7 @@ def load_pretrained_checkpoint(model, model_ema=None, finetune_from=None, amp=Fa
 
 
 def load_checkpoint(model, model_ema=None, resume_from=None, load_from=None, amp=False, optimizer=None, scheduler=None):
-    start_epoch, best_d_acc, best_miou = -1, 0.0, 0.0
+    start_epoch, best_d_acc, best_miou, best_oiou = -1, 0.0, 0.0, 0.0
     flag = True
     assert not (resume_from is not None and load_from is not None)
     load_file = resume_from or load_from

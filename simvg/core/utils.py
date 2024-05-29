@@ -144,22 +144,22 @@ def imshow_expr_mask(filename,
             output_pred.ax.add_patch(polygon)
         cv2.imwrite(outfile.replace(".jpg", "_pred.jpg"),
                     output_pred.get_image()[:, :, ::-1])
-        if gt_mask is not None:
-            output_gt = VisImage(img, scale=1.)
-            gt_mask = maskUtils.decode(gt_mask)
-            assert gt_mask.shape[0] == height and gt_mask.shape[1] == width
-            gt_mask = GenericMask(gt_mask, height, width)
-            for segment in gt_mask.polygons:
-                polygon = mpl.patches.Polygon(
-                    segment.reshape(-1, 2),
-                    fill=True,
-                    facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65, ),
-                    edgecolor=mplc.to_rgb([0., 0., 0.]) + (1, ),
-                    linewidth=2
-                )
-                output_gt.ax.add_patch(polygon)
-            cv2.imwrite(outfile.replace(".jpg", "_gt.jpg"),
-                        output_gt.get_image()[:, :, ::-1])
+        # if gt_mask is not None:
+        #     output_gt = VisImage(img, scale=1.)
+        #     gt_mask = maskUtils.decode(gt_mask)
+        #     assert gt_mask.shape[0] == height and gt_mask.shape[1] == width
+        #     gt_mask = GenericMask(gt_mask, height, width)
+        #     for segment in gt_mask.polygons:
+        #         polygon = mpl.patches.Polygon(
+        #             segment.reshape(-1, 2),
+        #             fill=True,
+        #             facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65, ),
+        #             edgecolor=mplc.to_rgb([0., 0., 0.]) + (1, ),
+        #             linewidth=2
+        #         )
+        #         output_gt.ax.add_patch(polygon)
+        #     cv2.imwrite(outfile.replace(".jpg", "_gt.jpg"),
+        #                 output_gt.get_image()[:, :, ::-1])
 
 
 def box_cxcywh_to_xyxy(x):

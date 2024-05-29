@@ -10,6 +10,7 @@ from .test import accuracy
 from simvg.datasets import extract_data
 from simvg.utils import get_root_logger, reduce_mean, is_main
 from collections import defaultdict
+import wandb
 
 try:
     import apex
@@ -68,7 +69,7 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
         if not cfg.distributed:
             inputs = extract_data(inputs)
 
-        losses, predictions = model(**inputs, rescale=False)
+        losses, predictions = model(**inputs, gt_mask=gt_mask, rescale=False)
 
         loss_det = losses.get("loss_det", torch.tensor([0.0], device=device))
         loss_mask = losses.pop("loss_mask", torch.tensor([0.0], device=device))
@@ -94,7 +95,9 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
         pred_masks = predictions.pop("pred_masks")
 
         with torch.no_grad():
-            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device)
+            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(
+                pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device
+            )
             if cfg.distributed:
                 batch_det_acc = reduce_mean(batch_det_acc)
                 batch_mask_iou = reduce_mean(batch_mask_iou)
@@ -129,6 +132,18 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
                     + f"mIoU: {mask_miou:.2f}, "
                     + f"oIoU: {mask_oiou:.2f}, "
                     + f"MaskACC@0.5-0.9: [{mask_acc[0]:.2f}, {mask_acc[1]:.2f}, {mask_acc[2]:.2f},  {mask_acc[3]:.2f},  {mask_acc[4]:.2f}]"
+                )
+                wandb.log(
+                    {
+                        "epoch": epoch,
+                        "loss_det": sum(loss_det_list) / len(loss_det_list),
+                        "loss_mask": sum(loss_mask_list) / len(loss_mask_list),
+                        "lr": optimizer.param_groups[0]["lr"],
+                        "DetACC@0.5": det_acc,
+                        "mIoU": mask_miou,
+                        "oIoU": mask_oiou,
+                        "MaskACC@0.5-0.9": mask_acc[0],
+                    }
                 )
 
         end = time.time()

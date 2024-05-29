@@ -9,3 +9,4 @@ visualization/
 visualize/
 detectron2/
 detrex/
+wandb/

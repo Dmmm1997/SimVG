@@ -8,9 +8,9 @@ from simvg.apis import inference_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="macvg-inference")
-    parser.add_argument('--config', default="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco/20240325_113117/20240325_113117_ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco.py",help='inference config file path.')
+    parser.add_argument('--config', default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/20240505_141258_beit3-mask-seg_512_mixcoco.py",help='inference config file path.')
     parser.add_argument(
-        '--checkpoint', default="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco/20240325_113117/det_best.pth",help='the checkpoint file to load from.')
+        '--checkpoint', default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/segm_best.pth",help='the checkpoint file to load from.')
     parser.add_argument(
         '--output-dir', default="visualization/", help='directory where inference results will be saved.')
     parser.add_argument('--with-gt', action='store_true', default=True,
@@ -31,7 +31,7 @@ def parse_args():
         '--which-set',
         type=str,
         nargs='+',
-        default='val',
+        default='val_refcoco_unc',
         help="evaluation which_sets, which depends on the dataset, e.g., \
         'val', 'testA', 'testB' for RefCOCO(Plus)UNC, and 'val', 'test' for RefCOCOgUMD.")
     args = parser.parse_args()

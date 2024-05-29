@@ -13,6 +13,7 @@ from simvg.datasets import build_dataset, build_dataloader
 from simvg.models import build_model, ExponentialMovingAverage
 from simvg.apis import set_random_seed, train_model, evaluate_model
 from simvg.utils import get_root_logger, load_checkpoint, save_checkpoint, load_pretrained_checkpoint, is_main, init_dist
+import wandb
 
 import warnings
 
@@ -27,6 +28,7 @@ except:
 def parse_args():
     parser = argparse.ArgumentParser(description="SeqTR-train")
     parser.add_argument("config", help="training configuration file path.")
+    parser.add_argument("--debug", default=False, help="training configuration file path.")
     parser.add_argument("--work-dir", help="directory of config file, training logs, and checkpoints.")
     parser.add_argument("--resume-from", help="resume training from the saved .pth checkpoint, only used in training.")
     parser.add_argument("--load-from", help="resume training from the saved .pth checkpoint, only used in training.")
@@ -57,6 +59,11 @@ def main_worker(cfg):
         init_dist()
     cfg.rank, cfg.world_size = get_dist_info()
     if is_main():
+        # if cfg.debug:
+        #     wandb.init(project="simvg-seg-offline", tags=[cfg.tag_name], name=cfg.wandb_name, mode="offline")
+        # else:
+        #     wandb.init(project="simvg-seg", tags=[cfg.tag_name], name=cfg.wandb_name)
+        wandb.init(project="simvg-seg-offline", tags=[cfg.tag_name], name=cfg.wandb_name, mode="offline")
         logger = get_root_logger(log_file=osp.join(cfg.work_dir, str(cfg.timestamp) + "_train_log.txt"))
         logger.info(cfg.pretty_text)
         cfg.dump(osp.join(cfg.work_dir, f"{cfg.timestamp}_" + osp.basename(cfg.config)))
@@ -107,7 +114,7 @@ def main_worker(cfg):
     if cfg.distributed:
         model = MMDistributedDataParallel(model, device_ids=[cfg.rank], find_unused_parameters=True)
     model_ema = ExponentialMovingAverage(model, cfg.ema_factor) if cfg.ema else None
-    start_epoch, best_d_acc, best_miou = -1, 0.0, 0.0
+    start_epoch, best_d_acc, best_miou, best_oiou = -1, 0.0, 0.0, 0.0
     if cfg.resume_from:
         start_epoch, _, _, flag = load_checkpoint(model, model_ema, cfg.resume_from, amp=cfg.use_fp16, optimizer=optimizer, scheduler=scheduler)
         if not flag:
@@ -128,30 +135,33 @@ def main_worker(cfg):
         this_epoch_train_time = int(time.time() - start_time)
         if is_main():
             logger.info("this_epoch_train_time={}m-{}s".format(this_epoch_train_time // 60, this_epoch_train_time % 60))
-            
-        if epoch%cfg.evaluate_interval==0 and epoch>=cfg.start_evaluate_epoch:
+
+        if epoch % cfg.evaluate_interval == 0 and epoch >= cfg.start_evaluate_epoch:
             d_acc, miou, oiou = 0, 0, 0
             for _loader in dataloaders[1:]:
                 if is_main():
                     logger.info("Evaluating dataset: {}".format(_loader.dataset.which_set))
-                set_d_acc, set_miou = evaluate_model(epoch, cfg, model, _loader)
+                set_d_acc, set_miou, set_oiou = evaluate_model(epoch, cfg, model, _loader)
 
                 if cfg.ema:
                     if is_main():
                         logger.info("Evaluating dataset using ema: {}".format(_loader.dataset.which_set))
                     model_ema.apply_shadow()
-                    ema_set_d_acc, ema_set_miou = evaluate_model(epoch, cfg, model, _loader)
+                    ema_set_d_acc, ema_set_miou, ema_set_oiou = evaluate_model(epoch, cfg, model, _loader)
                     model_ema.restore()
 
                 if cfg.ema:
                     d_acc += ema_set_d_acc
                     miou += ema_set_miou
+                    oiou += ema_set_oiou
                 else:
                     d_acc += set_d_acc
                     miou += set_miou
+                    oiou += set_oiou
 
             d_acc /= len(dataloaders[1:])
             miou /= len(dataloaders[1:])
+            oiou /= len(dataloaders[1:])
 
             if is_main():
                 this_epoch_total_time = int(time.time() - start_time)
@@ -159,7 +169,7 @@ def main_worker(cfg):
                 total_time = int(time.time() - begin_time)
                 logger.info("total_time={}m-{}s".format(total_time // 60, total_time % 60))
 
-            if is_main():
+            if is_main() and epoch>cfg.start_save_checkpoint:
                 # if cfg["dataset"]=="GRefCOCO":
                 #     saved_info = {"epoch": epoch, "f1_score": d_acc, "n_acc": miou, "best_f1_score": best_d_acc, "best_n_acc": best_miou, "amp": cfg.use_fp16}
                 # else:
@@ -168,8 +178,10 @@ def main_worker(cfg):
                     "epoch": epoch,
                     "d_acc": d_acc,
                     "miou": miou,
+                    "oiou": oiou,
                     "best_d_acc": best_d_acc,
                     "best_miou": best_miou,
+                    "best_oiou": best_oiou,
                     "amp": cfg.use_fp16,
                 }
                 save_checkpoint(
@@ -183,14 +195,27 @@ def main_worker(cfg):
                 )
             best_d_acc = max(d_acc, best_d_acc)
             best_miou = max(miou, best_miou)
+            best_oiou = max(oiou, best_oiou)
+
+            if is_main():
+                wandb.log(
+                    {
+                        "best_d_acc": best_d_acc,
+                        "best_miou": best_miou,
+                        "best_oiou": best_oiou,
+                        "total_time": total_time,
+                    }
+                )
 
         scheduler.step()
-        
+
         if cfg.distributed:
             dist.barrier()
 
     if cfg.distributed:
         dist.destroy_process_group()
+
+    wandb.finish()
 
 
 def main():
@@ -203,7 +228,7 @@ def main():
         cfg.work_dir = args.work_dir
     elif cfg.get("work_dir", None) is None:
         # cfg.work_dir = f"./work_dir/{cfg.timestamp}_" + osp.splitext(osp.basename(args.config))[0]
-        cfg.work_dir = f"./work_dir/"+args.config.split("configs/")[-1].split(".py")[0]
+        cfg.work_dir = f"./work_dir/" + args.config.split("configs/")[-1].split(".py")[0]
     cfg.work_dir = osp.join(cfg.work_dir, f"{cfg.timestamp}")
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
@@ -213,6 +238,9 @@ def main():
         cfg.load_from = args.load_from
     cfg.launcher = args.launcher
     cfg.config = args.config
+    cfg.debug = args.debug
+    cfg.wandb_name = "-".join(cfg.work_dir.split("/")[3:-1])
+    cfg.tag_name = "-".join(cfg.work_dir.split("/")[3:-2])
 
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
 

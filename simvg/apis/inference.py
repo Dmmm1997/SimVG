@@ -61,7 +61,7 @@ def inference_model(cfg):
                 img_metas = inputs["img_metas"]
                 batch_size = len(img_metas)
 
-                predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=with_bbox, with_mask=with_mask)[0]
+                predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=with_bbox, with_mask=with_mask)
 
                 pred_bboxes = [None for _ in range(batch_size)]
                 if with_bbox:
@@ -90,11 +90,11 @@ def inference_model(cfg):
 
                     scale_factors = img_meta["scale_factor"]
                     # pred_bbox /= pred_bbox.new_tensor(scale_factors)
-                    bbox_gt /= bbox_gt.new_tensor(scale_factors)
-
+                    
                     outfile = osp.join(cfg.output_dir, cfg.dataset + "_" + which_set, expression.replace(" ", "_") + "_" + osp.basename(filename))
 
                     if with_bbox:
+                        bbox_gt /= bbox_gt.new_tensor(scale_factors)
                         imshow_expr_bbox(filename, pred_bbox, outfile, gt_bbox=bbox_gt)
                     if with_mask:
                         imshow_expr_mask(filename, pred_mask, outfile, gt_mask=mask_gt, overlay=cfg.overlay)

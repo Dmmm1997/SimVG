@@ -9,9 +9,7 @@ from .one_stage import OneStageModel
 @MODELS.register_module()
 class MIXSeqTR(OneStageModel):
     def __init__(self, word_emb, num_token, vis_enc, lan_enc, head, fusion, loss_bbox=None):
-        super(MIXSeqTR, self).__init__(
-            word_emb, num_token, vis_enc, lan_enc, head, fusion
-        )
+        super(MIXSeqTR, self).__init__(word_emb, num_token, vis_enc, lan_enc, head, fusion)
         self.patch_size = vis_enc["patch_size"]
 
     def forward_train(
@@ -23,6 +21,7 @@ class MIXSeqTR(OneStageModel):
         gt_bbox=None,
         gt_mask_vertices=None,
         mass_center=None,
+        gt_mask=None,
         rescale=False,
     ):
         """Args:
@@ -47,24 +46,20 @@ class MIXSeqTR(OneStageModel):
 
         """
         B, _, H, W = img.shape
-        img_feat, text_feat, cls_feat = self.extract_visual_language(
-            img, ref_expr_inds, text_attention_mask
-        )
+        img_feat, text_feat, cls_feat = self.extract_visual_language(img, ref_expr_inds, text_attention_mask)
         img_feat = img_feat.transpose(-1, -2).reshape(B, -1, H // self.patch_size, W // self.patch_size)
-    
-        losses_dict, seq_out_dict = self.head.forward_train(
-            img_feat, img_metas, gt_bbox=gt_bbox, gt_mask_vertices=gt_mask_vertices
-        )
-            
+
+        losses_dict, seq_out_dict = self.head.forward_train(img_feat, img_metas, gt_bbox=gt_bbox, gt_mask_vertices=gt_mask_vertices)
+
         with torch.no_grad():
             predictions = self.get_predictions(seq_out_dict, img_metas, rescale=rescale)
 
         return losses_dict, predictions
 
     def extract_visual_language(self, img, ref_expr_inds, text_attention_mask=None):
-        x,y,c = self.vis_enc(img, ref_expr_inds, text_attention_mask)
+        x, y, c = self.vis_enc(img, ref_expr_inds, text_attention_mask)
         return x, y, c
-    
+
     @torch.no_grad()
     def forward_test(
         self,
@@ -93,16 +88,12 @@ class MIXSeqTR(OneStageModel):
         rescale (bool): whether to rescale predictions from `img_shape`/`pad_shape`
             back to `ori_shape`.
         """
-    
+
         B, _, H, W = img.shape
-        img_feat, text_feat, cls_feat = self.extract_visual_language(
-            img, ref_expr_inds, text_attention_mask
-        )
+        img_feat, text_feat, cls_feat = self.extract_visual_language(img, ref_expr_inds, text_attention_mask)
         img_feat = img_feat.transpose(-1, -2).reshape(B, -1, H // self.patch_size, W // self.patch_size)
-    
-        seq_out_dict = self.head.forward_test(
-            img_feat, img_metas, with_bbox=with_bbox, with_mask=with_mask
-        )
+
+        seq_out_dict = self.head.forward_test(img_feat, img_metas, with_bbox=with_bbox, with_mask=with_mask)
 
         predictions = self.get_predictions(seq_out_dict, img_metas, rescale=rescale)
 
@@ -137,9 +128,7 @@ class MIXSeqTR(OneStageModel):
                 pred_mask = pred_mask.astype(numpy.float64)
 
                 if len(pred_mask) < 4:  # at least three points to make a mask
-                    pred_mask = numpy.array(
-                        [0, 0, 0, 0, 0, 0], order="F", dtype=numpy.uint8
-                    )
+                    pred_mask = numpy.array([0, 0, 0, 0, 0, 0], order="F", dtype=numpy.uint8)
                     pred_mask = [pred_mask]
                 elif len(pred_mask) == 4:
                     pred_mask = pred_mask[None]  # as a bbox
@@ -151,9 +140,7 @@ class MIXSeqTR(OneStageModel):
 
                 if rescale:
                     h_img, w_img = img_meta["ori_shape"][:2]
-                    pred_mask = BitmapMasks(
-                        maskUtils.decode(pred_rle)[None], h_pad, w_pad
-                    )
+                    pred_mask = BitmapMasks(maskUtils.decode(pred_rle)[None], h_pad, w_pad)
                     pred_mask = pred_mask.resize((h_img, w_img))
                     pred_mask = pred_mask.masks[0]
                     pred_mask = numpy.asfortranarray(pred_mask)

@@ -8,6 +8,8 @@ from mmcv.parallel import collate
 from torch.utils.data import DataLoader
 from mmdet.datasets import GroupSampler, DistributedGroupSampler, DistributedSampler
 
+# from torch.utils.data import RandomSampler, DistributedSampler
+
 
 DATASETS = Registry('DATASETS')
 PIPELINES = Registry('PIPELINES')
@@ -32,12 +34,15 @@ def build_dataloader(cfg,
         if dataset.which_set == "train":
             sampler = DistributedGroupSampler(
                 dataset, cfg.data.samples_per_gpu, cfg.world_size, cfg.rank, seed=cfg.seed)
+            # sampler = DistributedSampler(
+            #     dataset, cfg.data.samples_per_gpu, cfg.world_size, cfg.rank, seed=cfg.seed)
         else:
             sampler = DistributedSampler(
                 dataset, cfg.world_size, cfg.rank, shuffle=False, seed=cfg.seed)
     else:
         sampler = GroupSampler(
             dataset, cfg.data.samples_per_gpu) if dataset.which_set == "train" else None
+    #    sampler = RandomSampler(dataset) if dataset.which_set == "train" else None
 
     init_fn = partial(
         worker_init_fn, num_workers=cfg.data.workers_per_gpu, rank=cfg.rank, seed=cfg.seed) if cfg.seed is not None else None

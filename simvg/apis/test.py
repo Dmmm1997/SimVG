@@ -11,6 +11,7 @@ from collections import defaultdict
 from mmdet.core import BitmapMasks
 import numpy as np
 
+
 def mask_overlaps(gt_mask, pred_masks, is_crowd):
     """Args:
     gt_mask (list[RLE]):
@@ -24,18 +25,39 @@ def mask_overlaps(gt_mask, pred_masks, is_crowd):
 
     mask_iou = computeIoU_RLE(gt_mask, pred_masks, is_crowd)
     mask_iou = torch.from_numpy(mask_iou)
-    
+
     return mask_iou
 
 
-def mask_overlaps_withIU(gt_masks, pred_masks):
+def mask_overlaps_withIU_RLE(gt_masks, pred_masks, is_crowds):
     # decode the mask
-    pred_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in pred_masks],dim=0)
-    gt_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in gt_masks],dim=0)
+    pred_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in pred_masks], dim=0)
+    gt_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in gt_masks], dim=0)
+    # pred_mask = pred_mask.argmax(1)
+    intersection = torch.sum(torch.mul(pred_mask, gt_mask).reshape(pred_mask.shape[0], -1), dim=-1)
+    union = torch.stack(
+        [
+            pred_mask_.sum() if is_crowd else (pred_mask_ + gt_mask_).sum() - inters
+            for pred_mask_, gt_mask_, is_crowd, inters in zip(pred_mask, gt_mask, is_crowds, intersection)
+        ],
+        dim=0,
+    )
+    intersection = intersection.cuda()
+    union = union.cuda()
+
+    # union = torch.sum(torch.add(pred_mask, gt_mask).reshape(pred_mask.shape[0], -1), dim=1).cuda() - intersection
+    iou = torch.tensor([i / u if u >= 1 else 0 for i, u in zip(intersection, union)]).cuda()
+    return iou, intersection, union
+
+
+def mask_overlaps_withIU(gt_masks, pred_masks, is_crowd):
+    # decode the mask
+    pred_mask = torch.concat([torch.from_numpy(maskUtils.decode(pred_rle)[None]) for pred_rle in pred_masks], dim=0)
+    gt_mask = torch.concat([torch.from_numpy(maskUtils.decode(gt_rle)[None]) for gt_rle in gt_masks], dim=0)
     # pred_mask = pred_mask.argmax(1)
     intersection = torch.sum(torch.mul(pred_mask, gt_mask).reshape(pred_mask.shape[0], -1), dim=-1).cuda()
-    union = torch.sum(torch.add(pred_mask, gt_mask).reshape(pred_mask.shape[0],-1), dim=1).cuda() - intersection
-    iou = torch.tensor([i/u if u>=1 else 0 for i,u in zip(intersection, union)]).cuda()
+    union = torch.sum(torch.add(pred_mask, gt_mask).reshape(pred_mask.shape[0], -1), dim=1).cuda() - intersection
+    iou = torch.tensor([i / u if u >= 1 else 0 for i, u in zip(intersection, union)]).cuda()
     return iou, intersection, union
 
 
@@ -92,14 +114,14 @@ def accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=None, device="c
 
     mask_iou = torch.tensor([0.0], device=device)
     mask_acc_at_thrs = torch.full((5,), -1.0, device=device)
-    I,U = torch.tensor([0.0], device=device), torch.tensor([0.0], device=device)
+    I, U = torch.tensor([0.0], device=device), torch.tensor([0.0], device=device)
     if eval_mask:
         # mask_iou = mask_overlaps(gt_mask, pred_masks, is_crowd).to(device)
-        mask_iou, I, U = mask_overlaps_withIU(gt_mask, pred_masks)
+        mask_iou, I, U = mask_overlaps_withIU(gt_mask, pred_masks, is_crowd)
         for i, iou_thr in enumerate([0.5, 0.6, 0.7, 0.8, 0.9]):
             mask_acc_at_thrs[i] = (mask_iou >= iou_thr).float().mean()
 
-    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0, I*100.0, U*100.0
+    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0, I*1.0, U*1.0
 
 
 def grec_evaluate_f1_nacc(predictions, gt_bboxes, targets, thresh_score=0.7, thresh_iou=0.5, thresh_F1=1.0, device="cuda:0"):
@@ -186,7 +208,7 @@ def evaluate_model(epoch, cfg, model, loader):
     end = time.time()
 
     with_bbox, with_mask = False, False
-    det_acc_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list= [], [], [], [], []
+    det_acc_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list = [], [], [], [], []
     with torch.no_grad():
         for batch, inputs in enumerate(loader):
             gt_bbox, gt_mask, is_crowd = None, None, None
@@ -220,7 +242,9 @@ def evaluate_model(epoch, cfg, model, loader):
             pred_bboxes = predictions.pop("pred_bboxes")
             pred_masks = predictions.pop("pred_masks")
 
-            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device)
+            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(
+                pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device
+            )
             if cfg.distributed:
                 batch_det_acc = reduce_mean(batch_det_acc)
                 batch_mask_iou = reduce_mean(batch_mask_iou)
@@ -254,4 +278,4 @@ def evaluate_model(epoch, cfg, model, loader):
 
             end = time.time()
 
-    return det_acc, (mask_miou+mask_oiou)/2
+    return det_acc, mask_miou, mask_oiou

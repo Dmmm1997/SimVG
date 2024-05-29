@@ -100,5 +100,8 @@ class DefaultFormatBundle:
             if 'mass_center' in results:
                 results['mass_center'] = DataContainer(
                     to_tensor(results['mass_center']), stack=True, pad_dims=None)
+            if 'gt_mask_seg' in results:
+                results['gt_mask_seg'] = DataContainer(
+                    to_tensor(results['gt_mask_seg']), stack=True, pad_dims=None)
 
         return results

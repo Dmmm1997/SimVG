@@ -10,30 +10,29 @@ from simvg.datasets.pipelines import Compose
 from simvg.datasets import extract_data
 from mmcv.parallel import collate
 import os
-from simvg.core import imshow_expr_bbox
+from simvg.core import imshow_expr_bbox, imshow_expr_mask
+import cv2
+import numpy as np
+from detectron2.utils.visualizer import GenericMask, VisImage
+import pycocotools.mask as maskUtils
+import matplotlib.colors as mplc
 
 
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--img", default="data/demo.jpg", help="Image file")
-    parser.add_argument("--expression", default="the red car and the white car", help="text")
+    parser.add_argument("--expression", default="front chair", help="text")
     parser.add_argument(
         "--config",
-        default="work_dir/paper_exp/sota_model/grefcoco/**ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200/20240328_062705/20240328_062705_ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200.py",
+        default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/20240505_141258_beit3-mask-seg_512_mixcoco.py",
         help="Config file",
     )
     parser.add_argument(
         "--checkpoint",
-        default="work_dir/paper_exp/sota_model/grefcoco/**ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200/20240328_062705/det_best.pth",
+        default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/segm_best.pth",
         help="Checkpoint file",
     )
-    parser.add_argument(
-        "--branch",
-        default="decoder",
-        choices=["token","decoder"],
-        help="token or decoder branch can be select",
-    )
-    parser.add_argument("--output_dir", default="visualize/results", help="Path to output file")
+    parser.add_argument("--output_dir", default="visualize/seg", help="Path to output file")
     parser.add_argument("--device", default="cuda:0", help="Device used for inference")
     parser.add_argument("--palette", default="coco", choices=["coco", "voc", "citys", "random"], help="Color palette used for visualization")
     parser.add_argument("--score-thr", type=float, default=0.7, help="bbox score threshold")
@@ -57,8 +56,15 @@ def init_detector(args):
 
 def inference_detector(cfg, model):
     img, text = cfg.img, cfg.expression
-    cfg.data.val.pipeline[0].type = "LoadFromRawSource"
-    test_pipeline = Compose(cfg.data.val.pipeline)
+    if "val" in cfg.data:
+        pipline = cfg.data.val.pipeline
+    else:
+        pipline = cfg.data.val_refcoco_unc.pipeline
+    pipline[0].type = "LoadFromRawSource"
+    pipline[0].with_mask = False
+    del pipline[5]["keys"][4]
+    del pipline[5]["keys"][3]
+    test_pipeline = Compose(pipline)
     result = {}
     ann = {}
     if cfg["dataset"] == "GRefCOCO":
@@ -80,8 +86,8 @@ def inference_detector(cfg, model):
 
     if "gt_bbox" in inputs:
         inputs.pop("gt_bbox")
-    index = 1 if args.branch=="token" else 0
-    predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=True)[index]
+
+    predictions = model(**inputs, return_loss=False, rescale=True, with_bbox=True)
     return predictions, img_metas
 
 
@@ -104,6 +110,14 @@ def draw_results(cfg, predictions, img_metas):
         os.makedirs(cfg.output_dir, exist_ok=True)
         outfile = os.path.join(cfg.output_dir, expression.replace(" ", "_") + "_" + os.path.basename(filename))
         imshow_expr_bbox(filename, pred_bbox, outfile)
+        
+def draw_results_seg(cfg, predictions, img_metas):    
+    pred_masks = predictions.pop("pred_masks")
+    for j, (img_meta, pred_mask) in enumerate(zip(img_metas, pred_masks)):
+        filename, expression = img_meta["filename"], img_meta["expression"]
+        os.makedirs(cfg.output_dir, exist_ok=True)
+        outfile = os.path.join(cfg.output_dir, expression.replace(" ", "_") + "_" + os.path.basename(filename))
+        imshow_expr_mask(filename, pred_mask, outfile)
 
 
 def main(args):
@@ -113,7 +127,7 @@ def main(args):
     # test a single image
     predictions, img_metas = inference_detector(cfg, model)
     # show the results
-    draw_results(cfg, predictions, img_metas)
+    draw_results_seg(cfg, predictions, img_metas)
 
 
 if __name__ == "__main__":
