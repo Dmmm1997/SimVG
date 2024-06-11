@@ -206,12 +206,12 @@ class DetrTransformer(nn.Module):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)  # [bs, c, h, w] -> [h*w, bs, c]
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
-        if len(query_embed.shape)==2:
+        if len(query_embed.shape) == 2:
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # [num_query, dim] -> [num_query, bs, dim]
         else:
-            query_embed = query_embed.transpose(0,1)  # [bs, num_query, dim] -> [num_query, bs, dim]
+            query_embed = query_embed.transpose(0, 1)  # [bs, num_query, dim] -> [num_query, bs, dim]
         mask = mask.view(bs, -1)  # [bs, h, w] -> [bs, h*w]
-        if not self.only_decoder: 
+        if not self.only_decoder:
             memory = self.encoder(
                 query=x,
                 key=None,

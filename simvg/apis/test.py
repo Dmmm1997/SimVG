@@ -10,6 +10,7 @@ from mmdet.core.bbox.iou_calculators.iou2d_calculator import bbox_overlaps
 from collections import defaultdict
 from mmdet.core import BitmapMasks
 import numpy as np
+import copy
 
 
 def mask_overlaps(gt_mask, pred_masks, is_crowd):
@@ -107,9 +108,14 @@ def accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=None, device="c
 
     det_acc = torch.tensor([0.0], device=device)
     bbox_iou = torch.tensor([0.0], device=device)
+    det_acc_at_thrs = torch.full((5,), -1.0, device=device)
     if eval_det:
         gt_bbox = torch.stack(gt_bbox).to(device)
+        if isinstance(pred_bboxes, list):
+            pred_bboxes = torch.stack(pred_bboxes)
         bbox_iou = bbox_overlaps(gt_bbox, pred_bboxes, is_aligned=True)
+        for i, iou_thr in enumerate([0.5, 0.6, 0.7, 0.8, 0.9]):
+            det_acc_at_thrs[i] = (bbox_iou >= iou_thr).float().mean()
         det_acc = (bbox_iou >= 0.5).float().mean()
 
     mask_iou = torch.tensor([0.0], device=device)
@@ -121,7 +127,7 @@ def accuracy(pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=None, device="c
         for i, iou_thr in enumerate([0.5, 0.6, 0.7, 0.8, 0.9]):
             mask_acc_at_thrs[i] = (mask_iou >= iou_thr).float().mean()
 
-    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0, I*1.0, U*1.0
+    return det_acc * 100.0, mask_iou * 100.0, mask_acc_at_thrs * 100.0, I * 1.0, U * 1.0, det_acc_at_thrs * 100.0
 
 
 def grec_evaluate_f1_nacc(predictions, gt_bboxes, targets, thresh_score=0.7, thresh_iou=0.5, thresh_F1=1.0, device="cuda:0"):
@@ -208,20 +214,31 @@ def evaluate_model(epoch, cfg, model, loader):
     end = time.time()
 
     with_bbox, with_mask = False, False
-    det_acc_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list = [], [], [], [], []
+    det_acc_list, det_accs_list, mask_iou_list, mask_acc_list, mask_I_list, mask_U_list = [], [], [], [], [], []
+    det_acc_list_fs, mask_iou_list_fs, mask_acc_list_fs, mask_I_list_fs, mask_U_list_fs = [], [], [], [], []
     with torch.no_grad():
         for batch, inputs in enumerate(loader):
             gt_bbox, gt_mask, is_crowd = None, None, None
 
+            # if "gt_bbox" in inputs:
+            #     with_bbox = True
+            #     if isinstance(inputs["gt_bbox"], torch.Tensor):
+            #         inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
+            #         gt_bbox = inputs.pop("gt_bbox")
+            #     else:
+            #         gt_bbox = inputs.pop("gt_bbox").data[0]
+            # if "gt_mask_rle" in inputs:
+            #     with_mask = True
+            #     gt_mask = inputs.pop("gt_mask_rle").data[0]
+
             if "gt_bbox" in inputs:
-                with_bbox = True
                 if isinstance(inputs["gt_bbox"], torch.Tensor):
                     inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
-                    gt_bbox = inputs.pop("gt_bbox")
+                    gt_bbox = copy.deepcopy(inputs["gt_bbox"])
                 else:
-                    gt_bbox = inputs.pop("gt_bbox").data[0]
+                    gt_bbox = copy.deepcopy(inputs["gt_bbox"].data[0])
+
             if "gt_mask_rle" in inputs:
-                with_mask = True
                 gt_mask = inputs.pop("gt_mask_rle").data[0]
             if "is_crowd" in inputs:
                 is_crowd = inputs.pop("is_crowd").data[0]
@@ -234,6 +251,7 @@ def evaluate_model(epoch, cfg, model, loader):
             predictions = model(
                 **inputs,
                 return_loss=False,
+                gt_mask=gt_mask,
                 rescale=False,
                 with_bbox=with_bbox,
                 with_mask=with_mask,
@@ -241,39 +259,73 @@ def evaluate_model(epoch, cfg, model, loader):
 
             pred_bboxes = predictions.pop("pred_bboxes")
             pred_masks = predictions.pop("pred_masks")
+            pred_bboxes_firststage = predictions.pop("pred_bboxes_first", None)
+            pred_masks_firststage = predictions.pop("pred_masks_first", None)
 
-            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U = accuracy(
+            batch_det_acc, batch_mask_iou, batch_mask_acc_at_thrs, batch_mask_I, batch_mask_U, batch_det_acc_at_thrs = accuracy(
                 pred_bboxes, gt_bbox, pred_masks, gt_mask, is_crowd=is_crowd, device=device
             )
+            if pred_bboxes_firststage is not None and len(pred_bboxes_firststage) > 0:
+                batch_det_acc_fs, batch_mask_iou_fs, batch_mask_acc_at_thrs_fs, batch_mask_I_fs, batch_mask_U_fs, batch_det_acc_at_thrs_fs = accuracy(
+                    pred_bboxes_firststage, gt_bbox, pred_masks_firststage, gt_mask, is_crowd=is_crowd, device=device
+                )
             if cfg.distributed:
                 batch_det_acc = reduce_mean(batch_det_acc)
                 batch_mask_iou = reduce_mean(batch_mask_iou)
                 batch_mask_I = reduce_mean(batch_mask_I)
                 batch_mask_U = reduce_mean(batch_mask_U)
                 batch_mask_acc_at_thrs = reduce_mean(batch_mask_acc_at_thrs)
+                batch_det_acc_at_thrs = reduce_mean(batch_det_acc_at_thrs)
+                if pred_bboxes_firststage is not None and len(pred_bboxes_firststage) > 0:
+                    batch_det_acc_fs = reduce_mean(batch_det_acc_fs)
+                    batch_mask_iou_fs = reduce_mean(batch_mask_iou_fs)
+                    batch_mask_I_fs = reduce_mean(batch_mask_I_fs)
+                    batch_mask_U_fs = reduce_mean(batch_mask_U_fs)
+                    batch_mask_acc_at_thrs_fs = reduce_mean(batch_mask_acc_at_thrs_fs)
 
             det_acc_list.append(batch_det_acc.item())
             mask_iou_list.append(batch_mask_iou)
             mask_I_list.append(batch_mask_I)
             mask_U_list.append(batch_mask_U)
             mask_acc_list.append(batch_mask_acc_at_thrs)
-
+            det_accs_list.append(batch_det_acc_at_thrs)
             det_acc = sum(det_acc_list) / len(det_acc_list)
             mask_miou = torch.cat(mask_iou_list).mean().item()
             mask_I = torch.cat(mask_I_list).mean().item()
             mask_U = torch.cat(mask_U_list).mean().item()
             mask_oiou = 100.0 * mask_I / mask_U
             mask_acc = torch.vstack(mask_acc_list).mean(dim=0).tolist()
+            det_accs = torch.vstack(det_accs_list).mean(dim=0).tolist()
+
+            det_acc_fs, mask_miou_fs, mask_oiou_fs, mask_acc_fs = 0, 0, 0, [0, 0, 0, 0, 0]
+            if pred_bboxes_firststage is not None and len(pred_bboxes_firststage) > 0:
+                det_acc_list_fs.append(batch_det_acc_fs.item())
+                mask_iou_list_fs.append(batch_mask_iou_fs)
+                mask_acc_list_fs.append(batch_mask_acc_at_thrs_fs)
+                mask_I_list_fs.append(batch_mask_I_fs)
+                mask_U_list_fs.append(batch_mask_U_fs)
+                det_acc_fs = sum(det_acc_list_fs) / len(det_acc_list_fs)
+                mask_miou_fs = torch.cat(mask_iou_list_fs).mean().item()
+                mask_I_fs = torch.cat(mask_I_list_fs).mean().item()
+                mask_U_fs = torch.cat(mask_U_list_fs).mean().item()
+                mask_oiou_fs = 100.0 * mask_I_fs / mask_U_fs
+                mask_acc_fs = torch.vstack(mask_acc_list_fs).mean(dim=0).tolist()
+
             if is_main():
                 if (batch + 1) % cfg.log_interval == 0 or batch + 1 == batches:
                     logger = get_root_logger()
                     logger.info(
                         f"validate - epoch [{epoch+1}]-[{batch+1}/{batches}] "
                         + f"time: {(time.time() - end):.2f}, "
-                        + f"DetACC@0.5: {det_acc:.2f}, "
+                        + f"DetACC: {det_acc:.2f}, "
                         + f"mIoU: {mask_miou:.2f}, "
-                        + f"oIoU: {mask_oiou:.2f},"
+                        + f"oIoU: {mask_oiou:.2f}, "
+                        # + f"fs_DetACC: {det_acc_fs:.2f}, "
+                        # + f"fs_mIoU: {mask_miou_fs:.2f}, "
+                        # + f"fs_oIoU: {mask_oiou_fs:.2f}, "
                         + f"MaskACC@0.5-0.9: [{mask_acc[0]:.2f}, {mask_acc[1]:.2f}, {mask_acc[2]:.2f},  {mask_acc[3]:.2f},  {mask_acc[4]:.2f}]"
+                        # + f"fs_MaskACC@0.5-0.9: [{mask_acc_fs[0]:.2f}, {mask_acc_fs[1]:.2f}, {mask_acc_fs[2]:.2f},  {mask_acc_fs[3]:.2f},  {mask_acc_fs[4]:.2f}]"
+                        + f"fs_DetACC@0.5-0.9: [{det_accs[0]:.2f}, {det_accs[1]:.2f}, {det_accs[2]:.2f},  {det_accs[3]:.2f},  {det_accs[4]:.2f}]"
                     )
 
             end = time.time()

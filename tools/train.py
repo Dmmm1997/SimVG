@@ -85,6 +85,8 @@ def main_worker(cfg):
     datasets = list(map(build_dataset, datasets_cfgs))
     dataloaders = list(map(lambda dataset: build_dataloader(cfg, dataset), datasets))
 
+    cfg.model.mask_save_target_dir = cfg.work_dir
+    cfg.model.threshold = cfg.threshold
     model = build_model(cfg.model, word_emb=datasets[0].word_emb, num_token=datasets[0].num_token)
     model = model.cuda()
     train_params = [
@@ -169,7 +171,7 @@ def main_worker(cfg):
                 total_time = int(time.time() - begin_time)
                 logger.info("total_time={}m-{}s".format(total_time // 60, total_time % 60))
 
-            if is_main() and epoch>cfg.start_save_checkpoint:
+            if is_main() and epoch > cfg.start_save_checkpoint:
                 # if cfg["dataset"]=="GRefCOCO":
                 #     saved_info = {"epoch": epoch, "f1_score": d_acc, "n_acc": miou, "best_f1_score": best_d_acc, "best_n_acc": best_miou, "amp": cfg.use_fp16}
                 # else:

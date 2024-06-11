@@ -10,8 +10,8 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "0" },
       "args": [
-        "configs/segmentation/ablation_setting_select/decoder/cls_token_seg.py",
-        // "configs/segmentation/pretrain/beit3-mask-seg_512_mixcoco.py",
+        "configs/unimodel/ep20_lr0.0005_s224_ablation/cliploss/pixel-level-box0.01.py",
+        // "configs/unimodel/pretrain/uni-256-p16-mixnogoogle.py",
         "--work-dir",
         "work_dir/debug/test",
         "--debug",
@@ -36,12 +36,12 @@
       "name": "inference.py",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/tools/inference.py",
+      "program": "${workspaceFolder}/tools/inference_badcase.py",
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "--output-dir",
-        "visualization/inference"
+        // "--output-dir",
+        // "visualization/inference"
       ]
     },
     {

@@ -184,3 +184,40 @@ class ExponentialMovingAverage(object):
             k: v.clone().detach()
             for k, v in self.model.state_dict().items()
         }
+
+
+
+def xywh_to_x1y1x2y2(boxes):
+    """
+    Convert bounding boxes from (x_center, y_center, width, height) to (x1, y1, x2, y2) format.
+
+    Args:
+        boxes (torch.Tensor): Bounding boxes with shape (..., 4) where the last dimension is (x_center, y_center, width, height).
+
+    Returns:
+        torch.Tensor: Bounding boxes with shape (..., 4) where the last dimension is (x1, y1, x2, y2).
+    """
+    x_center, y_center, width, height = boxes.unbind(-1)
+    x1 = x_center - width / 2
+    y1 = y_center - height / 2
+    x2 = x_center + width / 2
+    y2 = y_center + height / 2
+    return torch.stack([x1, y1, x2, y2], dim=-1)
+
+
+def x1y1x2y2_to_xywh(boxes):
+    """
+    Convert bounding boxes from (x1, y1, x2, y2) to (x_center, y_center, width, height) format.
+
+    Args:
+        boxes (torch.Tensor): Bounding boxes with shape (..., 4) where the last dimension is (x1, y1, x2, y2).
+
+    Returns:
+        torch.Tensor: Bounding boxes with shape (..., 4) where the last dimension is (x_center, y_center, width, height).
+    """
+    x1, y1, x2, y2 = boxes.unbind(-1)
+    width = x2 - x1
+    height = y2 - y1
+    x_center = x1 + width / 2
+    y_center = y1 + height / 2
+    return torch.stack([x_center, y_center, width, height], dim=-1)
