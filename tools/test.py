@@ -10,6 +10,7 @@ from mmcv.runner import get_dist_info
 from mmcv.utils import Config, DictAction
 from mmcv.parallel import MMDistributedDataParallel
 import os
+import pandas as pd
 
 try:
     import apex
@@ -55,7 +56,7 @@ def main_worker(cfg):
             "testB_refcocoplus_unc",
             "val_refcocog_umd",
             "test_refcocog_umd",
-            "val_refcocog_google",
+            # "val_refcocog_google",
         ]
         datasets_cfgs = [
             cfg.data.train,
@@ -67,7 +68,7 @@ def main_worker(cfg):
             cfg.data.testB_refcocoplus_unc,
             cfg.data.val_refcocog_umd,
             cfg.data.test_refcocog_umd,
-            cfg.data.val_refcocog_google,
+            # cfg.data.val_refcocog_google,
         ]
     else:
         prefix = ["val"]
@@ -99,18 +100,36 @@ def main_worker(cfg):
         # hacky way
         load_pretrained_checkpoint(model, model_ema, cfg.finetune_from, amp=cfg.use_fp16)
 
+    excel_results = {
+        'DetAcc': [],
+        'MaskAcc': [],
+        'miou': [],
+        'oiou': []
+    }
+    index_names = []
     for eval_loader, _prefix in zip(dataloaders, prefix):
         if is_main():
             logger = get_root_logger()
             logger.info(f"SimVG - evaluating set {_prefix}")
-        evaluate_model(-1, cfg, model, eval_loader)
+        set_d_acc, set_m_acc, set_miou, set_oiou = evaluate_model(-1, cfg, model, eval_loader)
         if cfg.ema:
             if is_main():
                 logger = get_root_logger()
                 logger.info(f"SimVG - evaluating set {_prefix} using ema")
             model_ema.apply_shadow()
-            evaluate_model(-1, cfg, model, eval_loader)
+            set_d_acc, set_m_acc, set_miou, set_oiou = evaluate_model(-1, cfg, model, eval_loader)
             model_ema.restore()
+        if is_main():
+            excel_results["DetAcc"].append("{.2f}".format(set_d_acc))
+            excel_results["MaskAcc"].append("{.2f}".format(set_m_acc))
+            excel_results["miou"].append("{.2f}".format(set_miou))
+            excel_results["oiou"].append("{.2f}".format(set_oiou))
+            index_names.append(_prefix)
+    if is_main():
+        df = pd.DataFrame(excel_results, index=index_names)
+        target_excel_path = os.path.join(work_dir, 'output.xlsx')
+        df.to_excel(target_excel_path, engine='openpyxl')
+        logger.info("sucessfully save the results to {} !!!".format(target_excel_path))
 
     if cfg.distributed:
         dist.destroy_process_group()

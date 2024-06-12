@@ -139,29 +139,32 @@ def main_worker(cfg):
             logger.info("this_epoch_train_time={}m-{}s".format(this_epoch_train_time // 60, this_epoch_train_time % 60))
 
         if epoch % cfg.evaluate_interval == 0 and epoch >= cfg.start_evaluate_epoch:
-            d_acc, miou, oiou = 0, 0, 0
+            d_acc, m_acc, miou, oiou = 0, 0, 0
             for _loader in dataloaders[1:]:
                 if is_main():
                     logger.info("Evaluating dataset: {}".format(_loader.dataset.which_set))
-                set_d_acc, set_miou, set_oiou = evaluate_model(epoch, cfg, model, _loader)
+                set_d_acc, set_m_acc, set_miou, set_oiou = evaluate_model(epoch, cfg, model, _loader)
 
                 if cfg.ema:
                     if is_main():
                         logger.info("Evaluating dataset using ema: {}".format(_loader.dataset.which_set))
                     model_ema.apply_shadow()
-                    ema_set_d_acc, ema_set_miou, ema_set_oiou = evaluate_model(epoch, cfg, model, _loader)
+                    ema_set_d_acc, ema_set_m_acc, ema_set_miou, ema_set_oiou = evaluate_model(epoch, cfg, model, _loader)
                     model_ema.restore()
 
                 if cfg.ema:
                     d_acc += ema_set_d_acc
+                    m_acc += ema_set_m_acc
                     miou += ema_set_miou
                     oiou += ema_set_oiou
                 else:
                     d_acc += set_d_acc
+                    m_acc += set_m_acc
                     miou += set_miou
                     oiou += set_oiou
 
             d_acc /= len(dataloaders[1:])
+            m_acc /= len(dataloaders[1:])
             miou /= len(dataloaders[1:])
             oiou /= len(dataloaders[1:])
 
@@ -179,6 +182,7 @@ def main_worker(cfg):
                 saved_info = {
                     "epoch": epoch,
                     "d_acc": d_acc,
+                    "m_acc": m_acc,
                     "miou": miou,
                     "oiou": oiou,
                     "best_d_acc": best_d_acc,

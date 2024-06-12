@@ -330,4 +330,4 @@ def evaluate_model(epoch, cfg, model, loader):
 
             end = time.time()
 
-    return det_acc, mask_miou, mask_oiou
+    return det_acc, mask_acc[0], mask_miou, mask_oiou
