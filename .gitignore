@@ -10,3 +10,5 @@ visualize/
 detectron2/
 detrex/
 wandb/
+pretrain_weights
+data

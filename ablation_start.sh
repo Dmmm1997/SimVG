@@ -2,7 +2,7 @@ source_dir=configs/unimodel/ep20_lr0.0005_s224_ablation/cliploss
 # file_names=$(ls $source_dir)
 # for file_name in $file_names
 # file_names=(B2S0.01-S2B0.05.py B2S0.05-S2B0.025.py S2B0.05.py)
-file_names=(pixel-level-seg0.01.py pixel-level-box0.01.py)
+file_names=(pixel-level-seg0.5.py pixel-level-box0.5.py)
 for file_name in "${file_names[@]}"
 do
   related_filename=$source_dir/$file_name
