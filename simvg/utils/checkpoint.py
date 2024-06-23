@@ -138,10 +138,10 @@ def save_checkpoint(work_dir, interval, model, model_ema, optimizer, scheduler, 
         logger.info(f"saved epoch {epoch} checkpoint at {latest_path}")
     if interval > 0 and epoch % interval == 0:
         torch.save(checkpoint, osp.join(work_dir, f"epoch_{epoch}.pth"))
-    if checkpoint["d_acc"] > checkpoint["best_d_acc"]:
-        shutil.copyfile(latest_path, det_best_path)
-        if is_main():
-            logger.info(f"saved epoch {epoch} checkpoint at {det_best_path}")
+    # if checkpoint["d_acc"] > checkpoint["best_d_acc"]:
+    #     shutil.copyfile(latest_path, det_best_path)
+    #     if is_main():
+    #         logger.info(f"saved epoch {epoch} checkpoint at {det_best_path}")
     if checkpoint["miou"] > checkpoint["best_miou"]:
         shutil.copyfile(latest_path, segm_best_path)
         if is_main():

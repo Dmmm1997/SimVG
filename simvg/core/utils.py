@@ -12,6 +12,8 @@ import numpy
 import torch
 from torchvision.ops.boxes import box_area
 
+from simvg.models.heads.uni_head_simple import compute_segboxiou
+
 
 EPS = 1e-2
 
@@ -31,13 +33,7 @@ def color_val_matplotlib(color):
     return tuple(color)
 
 
-def imshow_expr_bbox(filename,
-                     pred_bbox,
-                     outfile,
-                     gt_bbox=None,
-                     pred_bbox_color='r',
-                     gt_bbox_color='b',
-                     thickness=2):
+def imshow_expr_bbox(filename, pred_bbox, outfile, gt_bbox=None, pred_bbox_color="r", gt_bbox_color="b", thickness=2):
     # plt.clf()
     # _, axe = plt.subplots()
 
@@ -76,50 +72,58 @@ def imshow_expr_bbox(filename,
     #         gt_patch = PatchCollection(
     #             [gt_polygon], facecolor='none', edgecolors=[gt_bbox_color], linewidths=thickness)
     #         axe.add_collection(gt_patch)
-        
 
     # axe.axis('off')
     # axe.imshow(img)
     # plt.savefig(outfile)
 
     # plt.close()
-    
+
     img = cv2.imread(filename)
-    if pred_bbox is not None and pred_bbox.shape[0]!=0:
-        if len(pred_bbox.shape)==2:
+    if pred_bbox is not None and pred_bbox.shape[0] != 0:
+        if len(pred_bbox.shape) == 2:
             pred_bboxes = pred_bbox
         else:
             pred_bboxes = pred_bbox.unsqueeze(0)
         for pred_bbox in pred_bboxes:
             pred_bbox_int = pred_bbox.long().cpu().detach().numpy()
-            cv2.rectangle(img,(pred_bbox_int[0], pred_bbox_int[1]), (pred_bbox_int[2], pred_bbox_int[3]), color=[255,0,0], thickness=2)
+            cv2.rectangle(img, (pred_bbox_int[0], pred_bbox_int[1]), (pred_bbox_int[2], pred_bbox_int[3]), color=[255, 0, 0], thickness=2)
 
     if gt_bbox is not None:
-        if len(gt_bbox.shape)==2:
+        if len(gt_bbox.shape) == 2:
             gt_bboxes = gt_bbox
         else:
             gt_bboxes = gt_bbox.unsqueeze(0)
         for gt_bbox in gt_bboxes:
             gt_bbox_int = gt_bbox.long().cpu().detach().numpy()
-            cv2.rectangle(img,(gt_bbox_int[0], gt_bbox_int[1]), (gt_bbox_int[2], gt_bbox_int[3]), color=[0,0,255], thickness=2)
-            
+            cv2.rectangle(img, (gt_bbox_int[0], gt_bbox_int[1]), (gt_bbox_int[2], gt_bbox_int[3]), color=[0, 0, 255], thickness=2)
+
     cv2.imwrite(outfile, img)
 
 
-def imshow_expr_mask(filename,
-                     pred_mask,
-                     outfile,
-                     gt_mask=None,
-                     overlay=True):
+def is_badcase_boxsegioulowerthanthr(box, seg, thr=0.5):
+    seg = maskUtils.decode(seg)
+    seg = torch.tensor(seg)
+    box = box.int()
+    H, W = seg.shape
+    box[0] = torch.clamp(box[0], min=0, max=W - 1)  # x1
+    box[1] = torch.clamp(box[1], min=0, max=H - 1)  # y1
+    box[2] = torch.clamp(box[2], min=0, max=W - 1)  # x2
+    box[3] = torch.clamp(box[3], min=0, max=H - 1)  # y2
+    iou = compute_segboxiou(seg, box, threshold=0.5)
+    return iou < thr
+
+
+def imshow_expr_mask(filename, pred_mask, outfile, gt_mask=None, overlay=True):
     if not overlay:
         plt.clf()
-        plt.axis('off')
+        plt.axis("off")
         pred_mask = maskUtils.decode(pred_mask).astype(bool)
         plt.imshow(pred_mask, "gray")
         plt.savefig(outfile.replace(".jpg", "_pred.jpg"))
         if gt_mask is not None:
             plt.clf()
-            plt.axis('off')
+            plt.axis("off")
             gt_mask = maskUtils.decode(gt_mask).astype(bool)
             assert gt_mask.shape == pred_mask.shape
             plt.imshow(gt_mask, "gray")
@@ -129,7 +133,7 @@ def imshow_expr_mask(filename,
         img = cv2.imread(filename)[:, :, ::-1]
         height, width = img.shape[:2]
         img = numpy.ascontiguousarray(img).clip(0, 255).astype(numpy.uint8)
-        output_pred = VisImage(img, scale=1.)
+        output_pred = VisImage(img, scale=1.0)
         pred_mask = maskUtils.decode(pred_mask)
         assert pred_mask.shape[0] == height and pred_mask.shape[1] == width
         pred_mask = GenericMask(pred_mask, height, width)
@@ -137,30 +141,77 @@ def imshow_expr_mask(filename,
             polygon = mpl.patches.Polygon(
                 segment.reshape(-1, 2),
                 fill=True,
-                facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65, ),
-                edgecolor=mplc.to_rgb([0., 0., 0.]) + (1, ),
-                linewidth=2
+                facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65,),
+                edgecolor=mplc.to_rgb([0.0, 0.0, 0.0]) + (1,),
+                linewidth=2,
             )
             output_pred.ax.add_patch(polygon)
-        cv2.imwrite(outfile.replace(".jpg", "_pred.jpg"),
-                    output_pred.get_image()[:, :, ::-1])
-        # if gt_mask is not None:
-        #     output_gt = VisImage(img, scale=1.)
-        #     gt_mask = maskUtils.decode(gt_mask)
-        #     assert gt_mask.shape[0] == height and gt_mask.shape[1] == width
-        #     gt_mask = GenericMask(gt_mask, height, width)
-        #     for segment in gt_mask.polygons:
-        #         polygon = mpl.patches.Polygon(
-        #             segment.reshape(-1, 2),
-        #             fill=True,
-        #             facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65, ),
-        #             edgecolor=mplc.to_rgb([0., 0., 0.]) + (1, ),
-        #             linewidth=2
-        #         )
-        #         output_gt.ax.add_patch(polygon)
-        #     cv2.imwrite(outfile.replace(".jpg", "_gt.jpg"),
-        #                 output_gt.get_image()[:, :, ::-1])
+        cv2.imwrite(outfile.replace(".jpg", "_pred.jpg"), output_pred.get_image()[:, :, ::-1])
+        if gt_mask is not None:
+            output_gt = VisImage(img, scale=1.0)
+            gt_mask = maskUtils.decode(gt_mask)
+            assert gt_mask.shape[0] == height and gt_mask.shape[1] == width
+            gt_mask = GenericMask(gt_mask, height, width)
+            for segment in gt_mask.polygons:
+                polygon = mpl.patches.Polygon(
+                    segment.reshape(-1, 2),
+                    fill=True,
+                    facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65,),
+                    edgecolor=mplc.to_rgb([0.0, 0.0, 0.0]) + (1,),
+                    linewidth=2,
+                )
+                output_gt.ax.add_patch(polygon)
+            cv2.imwrite(outfile.replace(".jpg", "_gt.jpg"), output_gt.get_image()[:, :, ::-1])
 
+import matplotlib.patches as mpl_patches
+
+def imshow_box_mask(filename, pred_bbox, pred_mask, outfile, gt=False):
+    # seg
+    if gt:
+        facecolor = mplc.to_rgb([1.000, 0.627, 0.478]) + (0.65,)  # Light coral with 65% opacity
+        edgecolor = mplc.to_rgb([0.545, 0.000, 0.000]) + (1.0,)
+        edgecolor_box = "r"
+    else:
+        facecolor=mplc.to_rgb([0.439, 0.188, 0.627]) + (0.65,)
+        edgecolor=mplc.to_rgb([0.0, 0.0, 0.0]) + (1,)
+        edgecolor_box = "b"
+    img = cv2.imread(filename)[:, :, ::-1]
+    height, width = img.shape[:2]
+    img = numpy.ascontiguousarray(img).clip(0, 255).astype(numpy.uint8)
+    output_pred = VisImage(img, scale=1.0)
+    pred_mask = maskUtils.decode(pred_mask)
+    assert pred_mask.shape[0] == height and pred_mask.shape[1] == width
+    pred_mask = GenericMask(pred_mask, height, width)
+    for segment in pred_mask.polygons:
+        polygon = mpl.patches.Polygon(
+            segment.reshape(-1, 2),
+            fill=True,
+            facecolor=facecolor,
+            edgecolor=edgecolor,
+            linewidth=2,
+        )
+        output_pred.ax.add_patch(polygon)
+
+    # Draw bounding boxes if available
+    if pred_bbox is not None and pred_bbox.shape[0] != 0:
+        if len(pred_bbox.shape) == 2:
+            pred_bboxes = pred_bbox
+        else:
+            pred_bboxes = pred_bbox.unsqueeze(0)
+        for pred_bbox in pred_bboxes:
+            pred_bbox_int = pred_bbox.long().cpu().detach().numpy()
+            rect = mpl_patches.Rectangle(
+                (pred_bbox_int[0], pred_bbox_int[1]),  # (x1, y1)
+                pred_bbox_int[2] - pred_bbox_int[0],   # width
+                pred_bbox_int[3] - pred_bbox_int[1],   # height
+                linewidth=2,
+                edgecolor=edgecolor_box,
+                facecolor='none'
+            )
+            output_pred.ax.add_patch(rect)
+            
+    cv2.imwrite(outfile, output_pred.get_image()[:, :, ::-1])
+        
 
 def box_cxcywh_to_xyxy(x):
     x_c, y_c, w, h = x.unbind(-1)

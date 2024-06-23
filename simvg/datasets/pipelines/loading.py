@@ -11,6 +11,7 @@ import numpy as np
 from ..builder import PIPELINES
 from transformers import XLMRobertaTokenizer
 import cv2
+from copy import deepcopy
 
 def clean_string(expression):
     return (
@@ -261,6 +262,7 @@ class LoadImageAnnotationsFromFile(object):
                 rle = mask
             mask = maskUtils.decode(rle)
             mask = BitmapMasks(mask[None], h, w)
+            results["gt_ori_mask"] = deepcopy(rle)
             results["gt_mask"] = mask
             results["gt_mask_rle"] = rle  # {'size':, 'counts'}
             results["is_crowd"] = is_crowd

@@ -91,12 +91,12 @@ model = dict(
         loss_weight={
             "mask": {"dice": 1.0, "bce": 1.0},
             "bbox": 0.05,
-            "clip": {"box": 0.01, "seg": 0.0, "pixel": True},
+            "clip": {"box": 0.0, "seg": 0.0, "pixel": False},
             "boxsegcc": {"S2B": 0.0, "B2S": 0.0},
         },
-        training_visualization=True,
-        # query_augment={"num_queries":1}
+        query_augment={"num_queries":1},
         threshold={"B2S": 0.5, "S2B": 0.5},
+        decoder_upsample_type="fpn"
     ),
 )
 

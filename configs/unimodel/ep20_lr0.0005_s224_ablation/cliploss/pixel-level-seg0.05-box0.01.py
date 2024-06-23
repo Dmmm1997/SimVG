@@ -91,7 +91,7 @@ model = dict(
         loss_weight={
             "mask": {"dice": 1.0, "bce": 1.0},
             "bbox": 0.05,
-            "clip": {"box": 0.01, "seg": 0.05, "pixel": True},
+            "clip": {"box": 0.05, "seg": 0.05, "pixel": True},
             "boxsegcc": {"S2B": 0.0, "B2S": 0.0},
         },
         training_visualization=True,

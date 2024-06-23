@@ -320,11 +320,11 @@ def evaluate_model(epoch, cfg, model, loader):
                         + f"DetACC: {det_acc:.2f}, "
                         + f"mIoU: {mask_miou:.2f}, "
                         + f"oIoU: {mask_oiou:.2f}, "
-                        # + f"fs_DetACC: {det_acc_fs:.2f}, "
-                        # + f"fs_mIoU: {mask_miou_fs:.2f}, "
-                        # + f"fs_oIoU: {mask_oiou_fs:.2f}, "
+                        + f"fs_DetACC: {det_acc_fs:.2f}, "
+                        + f"fs_mIoU: {mask_miou_fs:.2f}, "
+                        + f"fs_oIoU: {mask_oiou_fs:.2f}, "
                         + f"MaskACC@0.5-0.9: [{mask_acc[0]:.2f}, {mask_acc[1]:.2f}, {mask_acc[2]:.2f},  {mask_acc[3]:.2f},  {mask_acc[4]:.2f}]"
-                        # + f"fs_MaskACC@0.5-0.9: [{mask_acc_fs[0]:.2f}, {mask_acc_fs[1]:.2f}, {mask_acc_fs[2]:.2f},  {mask_acc_fs[3]:.2f},  {mask_acc_fs[4]:.2f}]"
+                        + f"fs_MaskACC@0.5-0.9: [{mask_acc_fs[0]:.2f}, {mask_acc_fs[1]:.2f}, {mask_acc_fs[2]:.2f},  {mask_acc_fs[3]:.2f},  {mask_acc_fs[4]:.2f}]"
                         + f"fs_DetACC@0.5-0.9: [{det_accs[0]:.2f}, {det_accs[1]:.2f}, {det_accs[2]:.2f},  {det_accs[3]:.2f},  {det_accs[4]:.2f}]"
                     )
 

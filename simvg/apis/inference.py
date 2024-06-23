@@ -2,6 +2,7 @@ import mmcv
 import torch
 import os.path as osp
 
+from simvg.core.utils import imshow_box_mask, is_badcase_boxsegioulowerthanthr
 from simvg.utils import load_checkpoint, get_root_logger
 from simvg.core import imshow_expr_bbox, imshow_expr_mask
 from simvg.models import build_model, ExponentialMovingAverage
@@ -79,25 +80,40 @@ def inference_model(cfg):
                 pred_masks = [None for _ in range(batch_size)]
                 if with_mask:
                     pred_masks = predictions.pop("pred_masks")
-
+                    
                 for j, (img_meta, pred_bbox, pred_mask) in enumerate(zip(img_metas, pred_bboxes, pred_masks)):
                     filename, expression = img_meta["filename"], img_meta["expression"]
                     bbox_gt, mask_gt = None, None
                     if cfg.with_gt and with_bbox:
                         bbox_gt = gt_bbox[j]
                     if cfg.with_gt and with_mask:
-                        mask_gt = gt_mask[j]
+                        mask_gt = img_meta["gt_ori_mask"]
 
                     scale_factors = img_meta["scale_factor"]
                     # pred_bbox /= pred_bbox.new_tensor(scale_factors)
                     
-                    outfile = osp.join(cfg.output_dir, cfg.dataset + "_" + which_set, expression.replace(" ", "_") + "_" + osp.basename(filename))
-
-                    if with_bbox:
+                    outfile = osp.join(cfg.output_dir, cfg.dataset + "_" + which_set, expression.replace(" ", "_") + "_" + osp.basename(filename).split(".jpg")[0])
+                    badcase=False
+                    if is_badcase_boxsegioulowerthanthr(pred_bbox, pred_mask, 0.7):
+                        badcase = True
+                    
+                    if not cfg.onlybadcase or (cfg.onlybadcase and badcase):
+                        # box seg分开绘制
+                        # if with_bbox:
+                        #     bbox_gt /= bbox_gt.new_tensor(scale_factors)
+                        #     outfile_det = outfile + "_box.jpg"
+                        #     imshow_expr_bbox(filename, pred_bbox, outfile_det, gt_bbox=bbox_gt)
+                        # if with_mask:
+                        #     outfile_seg = outfile + "_seg.jpg"
+                        #     imshow_expr_mask(filename, pred_mask, outfile_seg, gt_mask=mask_gt, overlay=cfg.overlay)
+                        
+                        # boxseg合并绘制
+                        outfile_pred = outfile+"_pred.jpg"
+                        imshow_box_mask(filename, pred_bbox, pred_mask, outfile_pred, gt=False)
+                        
                         bbox_gt /= bbox_gt.new_tensor(scale_factors)
-                        imshow_expr_bbox(filename, pred_bbox, outfile, gt_bbox=bbox_gt)
-                    if with_mask:
-                        imshow_expr_mask(filename, pred_mask, outfile, gt_mask=mask_gt, overlay=cfg.overlay)
+                        outfile_gt = outfile+"_gt.jpg"
+                        imshow_box_mask(filename, bbox_gt, mask_gt, outfile_gt, gt=True)
 
                     prog_bar.update()
     if cfg.ema:

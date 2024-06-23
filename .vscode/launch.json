@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "0" },
       "args": [
-        "configs/unimodel/ep20_lr0.0005_s224_ablation/cliploss/pixel-level-box0.01.py",
+        "configs/unimodel/ablation/ab_uim/textattn+boxembed+bothweighted.py",
         // "configs/unimodel/pretrain/uni-256-p16-mixnogoogle.py",
         "--work-dir",
         "work_dir/debug/test",
@@ -38,7 +38,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/tools/inference_badcase.py",
       "console": "integratedTerminal",
-      "justMyCode": true,
+      "justMyCode": false,
       "args": [
         // "--output-dir",
         // "visualization/inference"

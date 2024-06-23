@@ -120,10 +120,10 @@ def main_worker(cfg):
             set_d_acc, set_m_acc, set_miou, set_oiou = evaluate_model(-1, cfg, model, eval_loader)
             model_ema.restore()
         if is_main():
-            excel_results["DetAcc"].append("{.2f}".format(set_d_acc))
-            excel_results["MaskAcc"].append("{.2f}".format(set_m_acc))
-            excel_results["miou"].append("{.2f}".format(set_miou))
-            excel_results["oiou"].append("{.2f}".format(set_oiou))
+            excel_results["DetAcc"].append("{:.2f}".format(set_d_acc))
+            excel_results["MaskAcc"].append("{:.2f}".format(set_m_acc))
+            excel_results["miou"].append("{:.2f}".format(set_miou))
+            excel_results["oiou"].append("{:.2f}".format(set_oiou))
             index_names.append(_prefix)
     if is_main():
         df = pd.DataFrame(excel_results, index=index_names)

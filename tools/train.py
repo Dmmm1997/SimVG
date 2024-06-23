@@ -139,7 +139,7 @@ def main_worker(cfg):
             logger.info("this_epoch_train_time={}m-{}s".format(this_epoch_train_time // 60, this_epoch_train_time % 60))
 
         if epoch % cfg.evaluate_interval == 0 and epoch >= cfg.start_evaluate_epoch:
-            d_acc, m_acc, miou, oiou = 0, 0, 0
+            d_acc, m_acc, miou, oiou = 0, 0, 0, 0
             for _loader in dataloaders[1:]:
                 if is_main():
                     logger.info("Evaluating dataset: {}".format(_loader.dataset.which_set))

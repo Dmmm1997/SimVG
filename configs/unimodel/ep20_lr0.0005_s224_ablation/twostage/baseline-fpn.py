@@ -85,18 +85,21 @@ model = dict(
     lan_enc=None,
     fusion=None,
     head=dict(
-        type="UniHeadSimple",
+        type="UniHeadCoarseToFine",
         input_channels=768,
         hidden_channels=256,
         loss_weight={
             "mask": {"dice": 1.0, "bce": 1.0},
             "bbox": 0.05,
-            "clip": {"box": 0.05, "seg": 0.05, "pixel": True},
+            "clip": {"box": 0.0, "seg": 0.0, "pixel": True},
             "boxsegcc": {"S2B": 0.0, "B2S": 0.0},
+            "stage": {"first": 0.0, "second": 1.0},
         },
-        training_visualization=True,
-        # query_augment={"num_queries":1}
         threshold={"B2S": 0.5, "S2B": 0.5},
+        start_epoch=0,
+        fpn=True,
+        # query_augment={"num_queries": 1},
+        unified_interaction_module=False,
     ),
 )
 

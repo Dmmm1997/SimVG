@@ -1,5 +1,16 @@
 import torch
 import numpy
+import cv2
+import numpy as np
+
+# 可视化每个样本的热力图
+def visualize_heatmaps_cv2(tensor_np, save_path):
+    sample = tensor_np[0].numpy()
+    # 将数值范围从 0-1 转换为 0-255
+    sample = (sample * 255).astype(np.uint8)
+    # 应用彩色映射
+    heatmap = cv2.applyColorMap(sample, cv2.COLORMAP_VIRIDIS)
+    cv2.imwrite(save_path, heatmap)
 
 
 def freeze_params(model):

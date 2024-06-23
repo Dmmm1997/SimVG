@@ -5,95 +5,55 @@ import torch
 from simvg.models import HEADS
 import pycocotools.mask as maskUtils
 import numpy as np
+
 from .unet_head import *
+from simvg.models.heads.uni_head_simple import bbox_loss, box_norm, boxseg_iouloss2, seg_loss, clip_infonNCEloss, consistencyloss
 from simvg.models.losses.boxloss import BoxLoss
 from ..losses.contristiveloss import HardMiningTripletLoss
-from .modules import BoxSegAttention, BoxSegPooler, SegBranch, BoxBranch
+from .modules import BoxSegAttention, BoxSegPooler, QueryAugment, SegBranch, BoxBranch, UnifiedInteractionModule
 from .unet_head import SimpleFPN
 from ..utils import xywh_to_x1y1x2y2
 from ..losses.clip_loss import ClipLoss, get_rank, get_world_size
 from .projection import Projector
 
 
-def seg_loss(inputs, target, loss_func):
-    weight = torch.FloatTensor([0.9, 1.1]).cuda()
-    return loss_func(inputs, target.long(), weight=weight)
-
-
-def bbox_loss(inputs, targets, img, loss_func):
-    gt_bbox = torch.stack(targets, dim=0)
-    norm_bbox = torch.zeros_like(gt_bbox, device=gt_bbox.device)
-
-    norm_bbox[:, 0] = (gt_bbox[:, 0] + gt_bbox[:, 2]) / 2.0  # x_center
-    norm_bbox[:, 1] = (gt_bbox[:, 1] + gt_bbox[:, 3]) / 2.0  # y_center
-    norm_bbox[:, 2] = gt_bbox[:, 2] - gt_bbox[:, 0]  # w
-    norm_bbox[:, 3] = gt_bbox[:, 3] - gt_bbox[:, 1]  # h
-
-    img_size = torch.tensor(img.shape[-2:], device=img.device)
-    norm_bbox = norm_bbox / (img_size.unsqueeze(0).repeat((img.shape[0], 2)))
-    loss, loss_box, loss_giou = loss_func(inputs, norm_bbox)
-    return loss
-
-
-def consistencyloss(bbox_feat, seg_feat, loss_func):
-    # consistencyloss
-    label = torch.arange(bbox_feat.shape[0])
-    feats = torch.concat((bbox_feat, seg_feat), dim=0)
-    labels = torch.concat((label, label))
-    consloss = loss_func(feats, labels)
-    return consloss
-
-
-def clip_infonNCEloss(feat1, feat2, loss_func, logit_scale):
-    feat1 = F.normalize(feat1, dim=-1)
-    feat2 = F.normalize(feat2, dim=-1)
-    return loss_func(feat1, feat2, logit_scale.exp())
-
-
-def boxseg_iouloss(box, mask):
-    # xywh_to_x1y1x2y2
-    box = xywh_to_x1y1x2y2(box)
-    mask = mask.argmax(1).squeeze(1)
-    B, H, W = mask.shape
-    iou_loss = []
-    for b in range(B):
-        x1, y1, x2, y2 = (box[b] * torch.tensor([W, H, W, H]).cuda()).to(torch.int)
-        # Ensure coordinates are within bounds
-        x1, x2 = max(0, x1), min(W, x2)
-        y1, y2 = max(0, y1), min(H, y2)
-        # Extract the sub-mask corresponding to the box
-        sub_mask = mask[b, y1:y2, x1:x2]
-        # Calculate the intersection
-        intersection = sub_mask.sum()
-        # Calculate the area of the mask
-        mask_area = mask[b].sum()
-        # Calculate the IoU
-        if mask_area > 0:
-            iou = intersection / mask_area
-        else:
-            iou = torch.tensor([0.0], device=mask.device)
-        iou_loss.append(1 - iou)
-    return sum(iou_loss) / len(iou_loss)
-
-
 @HEADS.register_module()
 class UniHeadCoarseToFine(nn.Module):
     def __init__(
-        self, input_channels=768, hidden_channels=256, loss_weight={"mask": 1.0, "bbox": 1.0}, loss_stage={"first": 1.0, "second": 1.0}, clip_loss_weight={}
+        self,
+        input_channels=768,
+        hidden_channels=256,
+        query_augment=None,
+        loss_weight={"mask": 1.0, "bbox": 0.025, "cons": 0.0},
+        threshold={"B2S": 0.1},
+        start_epoch=0,
+        decoder_upsample_type="none",
+        uim={"enable": False, "weighted_compose": "none", "enable_box_coorinate_embed": False, "box_weights": [0.1, 1.0]},
     ):
         super(UniHeadCoarseToFine, self).__init__()
         self.seg_branch_first = SegBranch(hidden_channels, upsample_rate=1)
         self.box_branch_first = BoxBranch(hidden_channels)
-        self.seg_branch_second = SegBranch(hidden_channels, upsample_rate=4)
+        self.decoder_upsample_type = decoder_upsample_type
+        if self.decoder_upsample_type == "fpn":
+            self.neck = SimpleFPN(
+                backbone_channel=hidden_channels,
+                in_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels],
+                out_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels * 2],
+            )
+            self.fpn_decoder = SimpleDecoding(hidden_channels * 2)
+        elif self.decoder_upsample_type == "tranposeconv":
+            self.neck = SegBranch(hidden_channels, upsample_rate=4).neck
+        else:
+            self.neck = nn.Identity()
+        self.seg_branch_second = SegBranch(hidden_channels, upsample_rate=1)
         self.box_branch_second = BoxBranch(hidden_channels)
         self.box_loss = BoxLoss()
         self.seg_loss = nn.functional.cross_entropy
         self.loss_weight = loss_weight
-        self.loss_stage = loss_stage
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.boxsegattn = BoxSegAttention(input_channels=hidden_channels)
-        self.cons_loss = HardMiningTripletLoss(margin=0.5, normalize_feature=True)
+        # self.boxsegattn = BoxSegAttention(input_channels=hidden_channels, input_size=input_size)
         self.clip_loss = ClipLoss(rank=get_rank(), world_size=get_world_size())
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
         self.lan_embedding = nn.Linear(input_channels, hidden_channels, bias=False)
         self.img_embedding = nn.Conv2d(input_channels, hidden_channels, kernel_size=1, bias=False)
@@ -101,16 +61,23 @@ class UniHeadCoarseToFine(nn.Module):
 
         self.seg_cons_embedding = nn.Linear(hidden_channels, hidden_channels, bias=False)
         self.box_cons_embedding = nn.Linear(hidden_channels, hidden_channels, bias=False)
-        self.clip_loss_weight = clip_loss_weight
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.boxsegpooler = BoxSegPooler(sample_scale=1 / 16)
-        self.fpn = SimpleFPN(
-            backbone_channel=hidden_channels,
-            in_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels],
-            out_channels=[hidden_channels // 8, hidden_channels // 4, hidden_channels // 2, hidden_channels],
-        )
-        self.fpn_decoder = SimpleDecoding(hidden_channels)
-        self.proj_pixel_level_cons = Projector(word_dim=hidden_channels, in_dim=hidden_channels // 2)
+
+        self.boxsegpooler = BoxSegPooler()
+        self.proj_pixel_level_cons = Projector(word_dim=hidden_channels, in_dim=hidden_channels, hidden_dim=hidden_channels // 2, kernel_size=1)
+        # query augment module
+        self.query_augment_module = None
+        if query_augment is not None:
+            self.query_augment_module = QueryAugment(hidden_channels=hidden_channels, num_queries=query_augment["num_queries"])
+        self.threshold = threshold
+        self.start_epoch = start_epoch
+        self.unified_interaction_module = uim["enable"]
+        if self.unified_interaction_module:
+            self.UIM = UnifiedInteractionModule(
+                input_channels=hidden_channels,
+                box_weights=uim["box_weights"],
+                weighted_compose=uim["weighted_compose"],
+                enable_box_coorinate_embed=uim["enable_box_coorinate_embed"],
+            )
 
     def text_pooler(self, lan_feat, lan_mask):
         lan_feat_pooler = torch.cat(list(map(lambda feat, mask: torch.max(feat[mask, :], dim=0, keepdim=True)[0], lan_feat, ~lan_mask)))
@@ -123,156 +90,189 @@ class UniHeadCoarseToFine(nn.Module):
         img_feat = self.img_embedding(x)
         query_feat = self.query_embedding(cls_feat)
         lan_feat = self.lan_embedding(lan_feat)
+        lan_pool = self.text_pooler(lan_feat, lan_mask)
+        # ! query augment
+        if self.query_augment_module is not None:
+            query_feat = self.query_augment_module(query_feat, img_feat, lan_feat, lan_mask)
         # ! stage 1
-        pred_mask = self.seg_branch_first(img_feat)
         pred_bbox = self.box_branch_first(query_feat)
-
-        pred_bbox_first = pred_bbox
-
-        # * bbox branch from the img avg feature
-        # pred_bbox = self.box_branch(self.pool(x).squeeze())
-
-        # * downsample target mask to the same size as pred mask
-        # pred_mask_first = pred_mask
-        # target_mask_first = F.interpolate(target_mask.float().unsqueeze(1), size=pred_mask.shape[-2:], mode="bilinear", align_corners=True).squeeze(1).to(torch.uint8)
-
-        # * upsample pred_mask to the same size as target_mask
+        if self.loss_weight["clip"]["pixel"]:
+            pred_mask = self.proj_pixel_level_cons(img_feat, lan_pool)
+        else:
+            pred_mask = self.seg_branch_first(img_feat)
         pred_mask_first = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
+        pred_bbox_first = pred_bbox
         target_mask_first = target_mask
 
-        # * first stage -- box seg pooling -> box_feat(B,C) seg_feat(B,C)
-        box_feat_first, [seg_feat_pos_first, seg_feat_neg_first] = self.boxsegpooler(pred_bbox, pred_mask, img_feat)
+        # # * first stage -- box seg pooling -> box_feat(B,C) seg_feat(B,C)
+        # # ! box seg pooling
+        # box_feat_first, [seg_feat_pos_first, seg_feat_neg_first] = self.boxsegpooler(
+        #     pred_bbox,
+        #     pred_mask,
+        #     img_feat,
+        #     gt=False,
+        #     img_pool=False,
+        # )
 
         # ! stage 2
-        pred_bbox_2_tmp, pred_mask_2_tmp = self.boxsegattn(box_feat_first, seg_feat_pos_first, img_feat, lan_feat, lan_mask)
-        pred_mask_2 = self.seg_branch_second(pred_mask_2_tmp)
-        pred_bbox_2 = self.box_branch_second(pred_bbox_2_tmp)
+        # ! unified interaction
+        extra_dict = {}
+        if self.unified_interaction_module:
+            # pred_bbox_2_tmp, pred_mask_2_tmp = self.boxsegattn(box_feat_first, seg_feat_pos_first, img_feat, lan_feat, lan_mask)
+            pred_bbox_2_tmp, pred_mask_2_tmp, extra = self.UIM(pred_bbox, pred_mask, img_feat, lan_feat, lan_mask)
+            if "unified_img_feat" in extra:
+                extra_dict["unified_img_feat"] = F.interpolate(extra["unified_img_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "seg_feat" in extra:
+                extra_dict["seg_feat"] = F.interpolate(extra["seg_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "box_feat" in extra:
+                extra_dict["box_feat"] = F.interpolate(extra["box_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "img_feat" in extra:
+                extra_dict["img_feat"] = F.interpolate(extra["img_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+        else:
+            pred_bbox_2_tmp, pred_mask_2_tmp = query_feat, img_feat
 
-        pred_mask_second = F.interpolate(pred_mask_2, size=img.shape[-2:], mode="bilinear", align_corners=True)
-        pred_bbox_second = pred_bbox_2
+        # ! decoder upsample
+        if self.decoder_upsample_type == "fpn":
+            x_c1, x_c2, x_c3, x_c4 = self.neck(pred_mask_2_tmp)
+            pred_mask_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        elif self.decoder_upsample_type == "tranposeconv":
+            pred_mask_up4 = self.neck(pred_mask_2_tmp)
+        else:
+            pred_mask_up4 = pred_mask_2_tmp
 
         # ! pixel level cons
-        x_c1, x_c2, x_c3, x_c4 = self.fpn(pred_mask_2_tmp)
-        pred_mask_2_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
-        pixel_level_cons_mask = self.proj_pixel_level_cons(pred_mask_2_up4, self.text_pooler(lan_feat, lan_mask))
-        pixel_level_cons_pred_mask = F.interpolate(pixel_level_cons_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
-
-        pred_mask_second = pred_mask_second + pixel_level_cons_pred_mask + pred_mask_first
+        if self.loss_weight["clip"]["pixel"]:
+            pred_mask_2 = self.proj_pixel_level_cons(pred_mask_up4, lan_pool)
+        else:
+            pred_mask_2 = self.seg_branch_second(pred_mask_up4)
+        pred_bbox_second = self.box_branch_second(pred_bbox_2_tmp)
+        pred_mask_second = F.interpolate(pred_mask_2, size=img.shape[-2:], mode="bilinear", align_corners=True)
 
         # ! loss func
-        loss_mask_first = seg_loss(pred_mask_first, target_mask_first, self.seg_loss) * self.loss_weight["mask"] * self.loss_stage["first"]
-        loss_bbox_first = bbox_loss(pred_bbox_first, targets["bbox"], img, self.box_loss) * self.loss_weight["bbox"] * self.loss_stage["first"]
-        loss_mask_second = seg_loss(pred_mask_second, target_mask, self.seg_loss) * self.loss_weight["mask"] * self.loss_stage["second"]
-        loss_bbox_second = bbox_loss(pred_bbox_second, targets["bbox"], img, self.box_loss) * self.loss_weight["bbox"] * self.loss_stage["second"]
-        # loss_cons_second = boxseg_iouloss(pred_bbox_second, pred_mask_second) * self.loss_weight["cons"]
-        # loss_cons_first = boxseg_iouloss(pred_bbox_first, pred_mask_first) * self.loss_weight["cons"]
-        # loss_cons = loss_cons_first + loss_cons_second
+        loss_mask_first = seg_loss(pred_mask_first, target_mask_first, self.loss_weight["mask"]) * self.loss_weight["stage"]["first"]
+        loss_bbox_first = bbox_loss(pred_bbox_first, targets["bbox"], img, self.box_loss) * self.loss_weight["bbox"] * self.loss_weight["stage"]["first"]
+        loss_mask_second = seg_loss(pred_mask_second, target_mask, self.loss_weight["mask"]) * self.loss_weight["stage"]["second"]
+        loss_bbox_second = bbox_loss(pred_bbox_second, targets["bbox"], img, self.box_loss) * self.loss_weight["bbox"] * self.loss_weight["stage"]["second"]
 
-        lan_feat = self.text_pooler(lan_feat, lan_mask)
-        clip_loss_first = torch.tensor([0.0], device=device)
-        clip_loss_second = torch.tensor([0.0], device=device)
-        if "first_stage" in self.clip_loss_weight:
-            # ! clip_loss first stage
-            box_level_clip_loss_first = torch.tensor([0.0], device=device)
-            seg_level_clip_loss_first = torch.tensor([0.0], device=device)
-            if "box" in self.clip_loss_weight["first_stage"]:
-                box_feat = self.box_cons_embedding(box_feat_first)
-                box_level_clip_loss_first, _, _ = clip_infonNCEloss(box_feat, lan_feat, self.clip_loss, self.logit_scale)
-                box_level_clip_loss_first = box_level_clip_loss_first * self.clip_loss_weight["first_stage"]["box"]
-            if "seg" in self.clip_loss_weight["first_stage"]:
-                seg_feat = self.seg_cons_embedding(torch.mean(seg_feat_pos_first, dim=1))
-                seg_level_clip_loss_first, _, _ = clip_infonNCEloss(seg_feat, lan_feat, self.clip_loss, self.logit_scale)
-                seg_level_clip_loss_first = seg_level_clip_loss_first * self.clip_loss_weight["first_stage"]["seg"]
-            clip_loss_first = box_level_clip_loss_first + seg_level_clip_loss_first
-        if "second_stage" in self.clip_loss_weight:
-            # ! clip_loss second stage
-            # * second stage -- box seg pooling -> box_feat(B,C) seg_feat(B,C)
-            x_uptostage2size = F.interpolate(img_feat, size=pred_mask_2.shape[-2:], mode="bilinear", align_corners=True)
-            box_feat_second, [seg_feat_pos_second, seg_feat_neg_second] = self.boxsegpooler(pred_bbox_2, pred_mask_2, x_uptostage2size)
-            box_level_clip_loss_second = torch.tensor([0.0], device=device)
-            seg_level_clip_loss_second = torch.tensor([0.0], device=device)
-            if "box" in self.clip_loss_weight["second_stage"]:
-                box_feat = self.box_cons_embedding(box_feat_second)
-                box_level_clip_loss_second, _, _ = clip_infonNCEloss(box_feat, lan_feat, self.clip_loss, self.logit_scale)
-                box_level_clip_loss_second = box_level_clip_loss_second * self.clip_loss_weight["second_stage"]["box"]
-            if "seg" in self.clip_loss_weight["second_stage"]:
-                seg_feat = self.seg_cons_embedding(torch.mean(seg_feat_pos_second, dim=1))
-                seg_level_clip_loss_second, _, _ = clip_infonNCEloss(seg_feat, lan_feat, self.clip_loss, self.logit_scale)
-                seg_level_clip_loss_second = seg_level_clip_loss_second * self.clip_loss_weight["second_stage"]["seg"]
-            clip_loss_second = box_level_clip_loss_second + seg_level_clip_loss_second
+        # ! clip loss
+        loss_clip = torch.tensor([0.0], device=device)
+        if self.loss_weight["clip"]["box"] + self.loss_weight["clip"]["seg"] > 0:
+            pred_mask_down2seg = F.interpolate(pred_mask_second, size=pred_mask_up4.shape[-2:], mode="bilinear", align_corners=True)
+            box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(pred_bbox_second, pred_mask_down2seg, pred_mask_up4, gt=False, img_pool=True)
+            # * use the groundtruth to do the contristive loss
+            # target_mask_tmp = F.interpolate(target_mask.unsqueeze(1), size=pred_mask_up4.shape[-2:], mode="nearest")
+            # target_box_tmp = box_norm(targets["bbox"], img)
+            # box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(target_box_tmp, target_mask_tmp, pred_mask_up4)
+            box_level_clip_loss = torch.tensor([0.0], device=device)
+            seg_level_clip_loss = torch.tensor([0.0], device=device)
+            # box
+            box_feat = self.box_cons_embedding(box_feat)
+            box_level_clip_loss = clip_infonNCEloss(box_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * self.loss_weight["clip"]["box"]
+            # seg
+            seg_feat = self.seg_cons_embedding(seg_feat_pos)
+            seg_level_clip_loss = clip_infonNCEloss(seg_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * self.loss_weight["clip"]["seg"]
+            loss_clip = box_level_clip_loss + seg_level_clip_loss
 
-        # loss_cons = (
-        #     consistencyloss(box_feat, seg_feat_pos, self.cons_loss) * self.loss_weight["cons"]
-        #     if "cons" in self.loss_weight
-        #     else torch.tensor([0.0], device=device)
-        # )
+        # ! cons loss
+        loss_cons_first = torch.tensor([0.0], device=device)
+        loss_cons_second = torch.tensor([0.0], device=device)
+        if (self.loss_weight["boxsegcc"]["S2B"] + self.loss_weight["boxsegcc"]["B2S"] > 0) and targets["epoch"] > self.start_epoch:
+            loss_S2B_first, loss_B2S_first, _, _ = boxseg_iouloss2(
+                pred_bbox_first, pred_mask_first, B2Sthr=self.threshold["B2S"], S2Bthr=self.threshold["S2B"], box_func=self.box_loss
+            )
+            loss_S2B_second, loss_B2S_second, _, _ = boxseg_iouloss2(
+                pred_bbox_second, pred_mask_second, B2Sthr=self.threshold["B2S"], S2Bthr=self.threshold["S2B"], box_func=self.box_loss
+            )
+            loss_cons_first = (
+                sum(loss_S2B_first) / len(loss_S2B_first) * self.loss_weight["boxsegcc"]["S2B"]
+                + sum(loss_B2S_first) / len(loss_B2S_first) * self.loss_weight["boxsegcc"]["B2S"]
+            ) * self.loss_weight["stage"]["first"]
+            loss_cons_second = (
+                sum(loss_S2B_second) / len(loss_S2B_second) * self.loss_weight["boxsegcc"]["S2B"]
+                + sum(loss_B2S_second) / len(loss_B2S_second) * self.loss_weight["boxsegcc"]["B2S"]
+            ) * self.loss_weight["stage"]["second"]
 
         loss_mask = loss_mask_first + loss_mask_second
         loss_det = loss_bbox_first + loss_bbox_second
-        loss_cons = clip_loss_first + clip_loss_second
+        loss_cons = loss_cons_first + loss_cons_second
         loss_dict = {
             "loss_mask": loss_mask,
             "loss_det": loss_det,
             "loss_cons": loss_cons,
+            "loss_clip": loss_clip,
             "loss_mask_first": loss_mask_first,
             "loss_bbox_first": loss_bbox_first,
             "loss_mask_second": loss_mask_second,
             "loss_bbox_second": loss_bbox_second,
-            "loss_cons_first": clip_loss_first,
-            "loss_cons_second": clip_loss_second,
+            "loss_cons_first": loss_cons_first,
+            "loss_cons_second": loss_cons_second,
         }
         pred_dict = {"pred_mask": pred_mask_second, "pred_bbox": pred_bbox_second, "pred_mask_first": pred_mask_first, "pred_bbox_first": pred_bbox_first}
-        return loss_dict, pred_dict
+        return loss_dict, pred_dict, extra_dict
 
-    def forward_test(self, x, cls_feat=None, lan_feat=None, lan_mask=None, img=None):
-        # one stage
-        # pred_mask = self.seg_branch(x)
-        # pred_bbox = self.box_branch(cls_feat)
-        # pred_bbox = self.box_branch(self.pool(x).squeeze())
-        # pred_mask = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
-
-        # all feats embedding to hidden_channels
-        # all feats embedding to hidden_channels
+    def forward_test(self, x, cls_feat=None, lan_feat=None, lan_mask=None, img=None, targets=None):
         img_feat = self.img_embedding(x)
         query_feat = self.query_embedding(cls_feat)
         lan_feat = self.lan_embedding(lan_feat)
+        lan_pool = self.text_pooler(lan_feat, lan_mask)
+        # ! query augment
+        if self.query_augment_module is not None:
+            query_feat = self.query_augment_module(query_feat, img_feat, lan_feat, lan_mask)
         # ! stage 1
-        pred_mask = self.seg_branch_first(img_feat)
         pred_bbox = self.box_branch_first(query_feat)
-
+        if self.loss_weight["clip"]["pixel"]:
+            pred_mask = self.proj_pixel_level_cons(img_feat, lan_pool)
+        else:
+            pred_mask = self.seg_branch_first(img_feat)
+        pred_mask_first = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
         pred_bbox_first = pred_bbox
 
-        # * bbox branch from the img avg feature
-        # pred_bbox = self.box_branch(self.pool(x).squeeze())
-
-        # * downsample target mask to the same size as pred mask
-        # pred_mask_first = pred_mask
-        # target_mask_first = F.interpolate(target_mask.float().unsqueeze(1), size=pred_mask.shape[-2:], mode="bilinear", align_corners=True).squeeze(1).to(torch.uint8)
-
-        # * upsample pred_mask to the same size as target_mask
-        pred_mask_first = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
-
-        # * first stage -- box seg pooling -> box_feat(B,C) seg_feat(B,C)
-        box_feat_first, [seg_feat_pos_first, seg_feat_neg_first] = self.boxsegpooler(pred_bbox, pred_mask, img_feat)
+        # # * first stage -- box seg pooling -> box_feat(B,C) seg_feat(B,C)
+        # # ! box seg pooling
+        # box_feat_first, [seg_feat_pos_first, seg_feat_neg_first] = self.boxsegpooler(
+        #     pred_bbox,
+        #     pred_mask,
+        #     img_feat,
+        #     gt=False,
+        #     img_pool=False,
+        # )
 
         # ! stage 2
-        pred_bbox_2_tmp, pred_mask_2_tmp = self.boxsegattn(box_feat_first, seg_feat_pos_first, img_feat, lan_feat, lan_mask)
-        pred_mask_2 = self.seg_branch_second(pred_mask_2_tmp)
-        pred_bbox_2 = self.box_branch_second(pred_bbox_2_tmp)
+        # ! unified interaction
+        extra_dict = {}
+        if self.unified_interaction_module:
+            # pred_bbox_2_tmp, pred_mask_2_tmp = self.boxsegattn(box_feat_first, seg_feat_pos_first, img_feat, lan_feat, lan_mask)
+            pred_bbox_2_tmp, pred_mask_2_tmp, extra = self.UIM(pred_bbox, pred_mask, img_feat, lan_feat, lan_mask)
+            if "unified_img_feat" in extra:
+                extra_dict["unified_img_feat"] = F.interpolate(extra["unified_img_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "seg_feat" in extra:
+                extra_dict["seg_feat"] = F.interpolate(extra["seg_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "box_feat" in extra:
+                extra_dict["box_feat"] = F.interpolate(extra["box_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+            if "img_feat" in extra:
+                extra_dict["img_feat"] = F.interpolate(extra["img_feat"], size=img.shape[-2:], mode="bilinear", align_corners=True)
+        else:
+            pred_bbox_2_tmp, pred_mask_2_tmp = query_feat, img_feat
 
-        pred_mask_second = F.interpolate(pred_mask_2, size=img.shape[-2:], mode="bilinear", align_corners=True)
-        pred_bbox_second = pred_bbox_2
+        # ! decoder upsample
+        if self.decoder_upsample_type == "fpn":
+            x_c1, x_c2, x_c3, x_c4 = self.neck(pred_mask_2_tmp)
+            pred_mask_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        elif self.decoder_upsample_type == "tranposeconv":
+            pred_mask_up4 = self.neck(pred_mask_2_tmp)
+        else:
+            pred_mask_up4 = pred_mask_2_tmp
 
         # ! pixel level cons
-        x_c1, x_c2, x_c3, x_c4 = self.fpn(pred_mask_2_tmp)
-        pred_mask_2_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
-        pixel_level_cons_mask = self.proj_pixel_level_cons(pred_mask_2_up4, self.text_pooler(lan_feat, lan_mask))
-        pixel_level_cons_pred_mask = F.interpolate(pixel_level_cons_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
-
-        pred_mask_second = pred_mask_second + pixel_level_cons_pred_mask + pred_mask_first
+        if self.loss_weight["clip"]["pixel"]:
+            pred_mask_2 = self.proj_pixel_level_cons(pred_mask_up4, lan_pool)
+        else:
+            pred_mask_2 = self.seg_branch_second(pred_mask_up4)
+        pred_bbox_second = self.box_branch_second(pred_bbox_2_tmp)
+        pred_mask_second = F.interpolate(pred_mask_2, size=img.shape[-2:], mode="bilinear", align_corners=True)
 
         pred_dict = {"pred_mask": pred_mask_second, "pred_bbox": pred_bbox_second, "pred_mask_first": pred_mask_first, "pred_bbox_first": pred_bbox_first}
-        return pred_dict
+        return pred_dict, extra_dict
 
 
 @HEADS.register_module()

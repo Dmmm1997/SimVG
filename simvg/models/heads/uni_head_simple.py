@@ -8,6 +8,7 @@ import numpy as np
 from .unet_head import *
 from simvg.models.losses.boxloss import BoxLoss
 from ..losses.contristiveloss import HardMiningTripletLoss
+from ..losses import CEMLoss
 from .modules import BoxSegAttention, BoxSegPooler, SegBranch, BoxBranch, QueryAugment
 from .unet_head import SimpleFPN
 from ..utils import xywh_to_x1y1x2y2, x1y1x2y2_to_xywh
@@ -104,7 +105,7 @@ def seg_loss(inputs, target, loss_info):
     return loss_seg
 
 
-def bbox_loss(inputs, targets, img, loss_func):
+def box_norm(targets, img):
     gt_bbox = torch.stack(targets, dim=0)
     norm_bbox = torch.zeros_like(gt_bbox, device=gt_bbox.device)
 
@@ -115,6 +116,11 @@ def bbox_loss(inputs, targets, img, loss_func):
 
     img_size = torch.tensor(img.shape[-2:], device=img.device)
     norm_bbox = norm_bbox / (img_size.unsqueeze(0).repeat((img.shape[0], 2)))
+    return norm_bbox
+
+
+def bbox_loss(inputs, targets, img, loss_func):
+    norm_bbox = box_norm(targets, img)
     loss, loss_box, loss_giou = loss_func(inputs, norm_bbox)
     return loss
 
@@ -271,7 +277,8 @@ class UniHeadSimple(nn.Module):
         mask_save_target_dir="visualization/training_mask_box/",
         training_visualization=False,
         threshold={"B2S": 0.1},
-        start_epoch=10,
+        start_epoch=0,
+        decoder_upsample_type="none",
     ):
         super(UniHeadSimple, self).__init__()
         self.seg_branch = SegBranch(hidden_channels, upsample_rate=1)
@@ -281,6 +288,7 @@ class UniHeadSimple(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.triplet_loss = HardMiningTripletLoss(margin=0.5, normalize_feature=True)
         self.clip_loss = ClipLoss(rank=get_rank(), world_size=get_world_size())
+        self.cem_loss = CEMLoss(hidden_dim=hidden_channels)
 
         self.lan_embedding = nn.Linear(input_channels, hidden_channels, bias=False)
         self.img_embedding = nn.Conv2d(input_channels, hidden_channels, kernel_size=1, bias=False)
@@ -290,12 +298,18 @@ class UniHeadSimple(nn.Module):
         self.box_cons_embedding = nn.Linear(hidden_channels, hidden_channels, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.boxsegpooler = BoxSegPooler()
-        self.fpn = SimpleFPN(
-            backbone_channel=hidden_channels,
-            in_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels],
-            out_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels * 2],
-        )
-        self.fpn_decoder = SimpleDecoding(hidden_channels * 2)
+        self.decoder_upsample_type = decoder_upsample_type
+        if self.decoder_upsample_type == "fpn":
+            self.neck = SimpleFPN(
+                backbone_channel=hidden_channels,
+                in_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels],
+                out_channels=[hidden_channels // 4, hidden_channels // 2, hidden_channels, hidden_channels * 2],
+            )
+            self.fpn_decoder = SimpleDecoding(hidden_channels * 2)
+        elif self.decoder_upsample_type == "tranposeconv":
+            self.neck = SegBranch(hidden_channels, upsample_rate=4).neck
+        else:
+            self.neck = nn.Identity()
         self.proj_pixel_level_cons = Projector(word_dim=hidden_channels, in_dim=hidden_channels, hidden_dim=hidden_channels // 2, kernel_size=1)
         # query augment module
         self.query_augment_module = None
@@ -321,24 +335,33 @@ class UniHeadSimple(nn.Module):
         if self.query_augment_module is not None:
             query_feat = self.query_augment_module(query_feat, img_feat, lan_feat, lan_mask)
         pred_bbox = self.box_branch(query_feat)
-        x_c1, x_c2, x_c3, x_c4 = self.fpn(img_feat)
-        pred_mask_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        if self.decoder_upsample_type == "fpn":
+            x_c1, x_c2, x_c3, x_c4 = self.neck(img_feat)
+            pred_mask = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        elif self.decoder_upsample_type == "tranposeconv":
+            pred_mask = self.neck(img_feat)
+        else:
+            pred_mask = img_feat
         # ! pixel level cons
         if self.loss_weight["clip"]["pixel"]:
-            pred_mask = self.proj_pixel_level_cons(pred_mask_up4, lan_pool)
-            pred_mask = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
+            pred_seg = self.proj_pixel_level_cons(pred_mask, lan_pool)
         else:
-            pred_seg_up4 = self.seg_branch(pred_mask_up4)
-            pred_mask = F.interpolate(pred_seg_up4, size=img.shape[-2:], mode="bilinear", align_corners=True)
+            pred_seg = self.seg_branch(pred_mask)
+        pred_seg = F.interpolate(pred_seg, size=img.shape[-2:], mode="bilinear", align_corners=True)
+
         # ! loss func
-        loss_mask = seg_loss(pred_mask, target_mask, self.loss_weight["mask"])
+        loss_mask = seg_loss(pred_seg, target_mask, self.loss_weight["mask"])
         loss_det = bbox_loss(pred_bbox, targets["bbox"], img, self.box_loss) * self.loss_weight["bbox"]
 
         # ! clip loss
         loss_clip = torch.tensor([0.0], device=device)
         if self.loss_weight["clip"]["box"] + self.loss_weight["clip"]["seg"] > 0:
-            pred_mask_down2seg = F.interpolate(pred_mask, size=pred_mask_up4.shape[-2:], mode="bilinear", align_corners=True)
-            box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(pred_bbox, pred_mask_down2seg, pred_mask_up4)
+            # pred_mask_down2seg = F.interpolate(pred_mask, size=pred_mask_up4.shape[-2:], mode="bilinear", align_corners=True)
+            # box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(pred_bbox, pred_mask_down2seg, pred_mask_up4)
+            # * use the groundtruth to do the contristive loss
+            target_mask_tmp = F.interpolate(target_mask.unsqueeze(1), size=pred_mask.shape[-2:], mode="nearest")
+            target_box_tmp = box_norm(targets["bbox"], img)
+            box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(target_box_tmp, target_mask_tmp, pred_mask, gt=False, img_pool=True)
             box_level_clip_loss = torch.tensor([0.0], device=device)
             seg_level_clip_loss = torch.tensor([0.0], device=device)
             # box
@@ -351,10 +374,18 @@ class UniHeadSimple(nn.Module):
 
         # ! cons loss
         loss_cons = torch.tensor([0.0], device=device)
-        if (self.loss_weight["boxsegcc"]["S2B"] + self.loss_weight["boxsegcc"]["B2S"] > 0) and targets["epoch"] > self.start_epoch:
-            loss_S2B, loss_B2S, _, _ = boxseg_iouloss2(pred_bbox, pred_mask, B2Sthr=self.threshold["B2S"], S2Bthr=self.threshold["S2B"], box_func=self.box_loss)
-            loss_cons += sum(loss_S2B) / len(loss_S2B) * self.loss_weight["boxsegcc"]["S2B"]
-            loss_cons += sum(loss_B2S) / len(loss_B2S) * self.loss_weight["boxsegcc"]["B2S"]
+        if targets["epoch"] >= self.start_epoch:
+            if self.loss_weight["boxsegcc"]["S2B"] + self.loss_weight["boxsegcc"]["B2S"] > 0:
+                loss_S2B, loss_B2S, _, _ = boxseg_iouloss2(
+                    pred_bbox, pred_seg, B2Sthr=self.threshold["B2S"], S2Bthr=self.threshold["S2B"], box_func=self.box_loss
+                )
+                loss_cons += sum(loss_S2B) / len(loss_S2B) * self.loss_weight["boxsegcc"]["S2B"]
+                loss_cons += sum(loss_B2S) / len(loss_B2S) * self.loss_weight["boxsegcc"]["B2S"]
+            if self.loss_weight["boxsegcc"]["cem"] > 0:
+                B, C = query_feat.shape
+                pred_box_feat = query_feat.reshape(B, 1, 1, C)
+                loss_cem = self.cem_loss(pred_box_feat, pred_mask)
+                loss_cons += loss_cem
 
         loss_dict = {
             "loss_mask": loss_mask,
@@ -369,33 +400,36 @@ class UniHeadSimple(nn.Module):
             # "loss_cons_second": clip_loss_second,
         }
         pred_dict = {
-            "pred_mask": pred_mask.detach(),
+            "pred_mask": pred_seg.detach(),
             "pred_bbox": pred_bbox.detach(),
-            "pred_mask_first": pred_mask.detach(),
+            "pred_mask_first": pred_seg.detach(),
             "pred_bbox_first": pred_bbox.detach(),
         }
         return loss_dict, pred_dict
 
     def forward_test(self, x, cls_feat=None, lan_feat=None, lan_mask=None, img=None, targets=None):
 
-        # all feats embedding to hidden_channels
         img_feat = self.img_embedding(x)
         query_feat = self.query_embedding(cls_feat)
         lan_feat = self.lan_embedding(lan_feat)
         lan_pool = self.text_pooler(lan_feat, lan_mask)
-
+        # ! query augment
         if self.query_augment_module is not None:
             query_feat = self.query_augment_module(query_feat, img_feat, lan_feat, lan_mask)
         pred_bbox = self.box_branch(query_feat)
-        x_c1, x_c2, x_c3, x_c4 = self.fpn(img_feat)
-        pred_mask_up4 = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        if self.decoder_upsample_type == "fpn":
+            x_c1, x_c2, x_c3, x_c4 = self.neck(img_feat)
+            pred_mask = self.fpn_decoder(x_c4, x_c3, x_c2, x_c1)
+        elif self.decoder_upsample_type == "tranposeconv":
+            pred_mask = self.neck(img_feat)
+        else:
+            pred_mask = img_feat
         # ! pixel level cons
         if self.loss_weight["clip"]["pixel"]:
-            pred_mask = self.proj_pixel_level_cons(pred_mask_up4, lan_pool)
-            pred_mask = F.interpolate(pred_mask, size=img.shape[-2:], mode="bilinear", align_corners=True)
+            pred_seg = self.proj_pixel_level_cons(pred_mask, lan_pool)
         else:
-            pred_seg_up4 = self.seg_branch(pred_mask_up4)
-            pred_mask = F.interpolate(pred_seg_up4, size=img.shape[-2:], mode="bilinear", align_corners=True)
+            pred_seg = self.seg_branch(pred_mask)
+        pred_seg = F.interpolate(pred_seg, size=img.shape[-2:], mode="bilinear", align_corners=True)
 
-        pred_dict = {"pred_mask": pred_mask, "pred_bbox": pred_bbox, "pred_mask_first": pred_mask, "pred_bbox_first": pred_bbox}
+        pred_dict = {"pred_mask": pred_seg, "pred_bbox": pred_bbox, "pred_mask_first": pred_seg, "pred_bbox_first": pred_bbox}
         return pred_dict

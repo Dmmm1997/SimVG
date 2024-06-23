@@ -8,15 +8,16 @@ from simvg.apis import inference_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="macvg-inference")
-    parser.add_argument('--config', default="work_dir/unimodel/ep20_lr0.0005_s224_ablation/consistency-both/**baseline/20240611_100508/20240611_100508_baseline.py",help='inference config file path.')
+    parser.add_argument('--config', default="work_dir/unimodel/ablation/summary/1-baseline/20240615_164109/20240615_164109_1-baseline.py",help='inference config file path.')
     parser.add_argument(
-        '--checkpoint', default="work_dir/unimodel/ep20_lr0.0005_s224_ablation/consistency-both/**baseline/20240611_100508/segm_best.pth",help='the checkpoint file to load from.')
+        '--checkpoint', default="work_dir/unimodel/ablation/summary/1-baseline/20240615_164109/segm_best.pth",help='the checkpoint file to load from.')
     parser.add_argument(
-        '--output-dir', default="visualization/baseline_badcase", help='directory where inference results will be saved.')
+        '--output-dir', default="visualization/baseline-badcase", help='directory where inference results will be saved.')
     parser.add_argument('--with-gt', action='store_true', default=True,
                         help='draw ground-truth bbox/mask on image if true.')
     parser.add_argument('--no-overlay', action='store_false', dest='overlay')
     parser.add_argument('--score-threahold', default=0.7, type=float)
+    parser.add_argument('--onlybadcase', default=True, type=bool)
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -31,7 +32,7 @@ def parse_args():
         '--which-set',
         type=str,
         nargs='+',
-        default='val_refcoco_unc',
+        default='val',
         help="evaluation which_sets, which depends on the dataset, e.g., \
         'val', 'testA', 'testB' for RefCOCO(Plus)UNC, and 'val', 'test' for RefCOCOgUMD.")
     args = parser.parse_args()
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     cfg.with_gt = args.with_gt
     cfg.rank = 0
     cfg.distributed = False
+    cfg.onlybadcase = args.onlybadcase
 
     for which_set in cfg.which_set:
         mkdir_or_exist(
