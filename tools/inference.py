@@ -8,15 +8,16 @@ from simvg.apis import inference_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="macvg-inference")
-    parser.add_argument('--config', default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/20240505_141258_beit3-mask-seg_512_mixcoco.py",help='inference config file path.')
+    parser.add_argument('--config', default="work_dir/unimodel/pretrain/uni-384/20240623_192931/20240623_192931_uni-384.py",help='inference config file path.')
     parser.add_argument(
-        '--checkpoint', default="work_dir/segmentation/pretrain/beit3-mask-seg_512_mixcoco/20240505_141258/segm_best.pth",help='the checkpoint file to load from.')
+        '--checkpoint', default="work_dir/unimodel/pretrain/uni-384/20240623_192931/segm_best.pth",help='the checkpoint file to load from.')
     parser.add_argument(
-        '--output-dir', default="visualization/", help='directory where inference results will be saved.')
+        '--output-dir', default="visualization/val_refcoco", help='directory where inference results will be saved.')
     parser.add_argument('--with-gt', action='store_true', default=True,
                         help='draw ground-truth bbox/mask on image if true.')
     parser.add_argument('--no-overlay', action='store_false', dest='overlay')
-    parser.add_argument('--score-threahold', default=0.7, type=float)
+    parser.add_argument('--score-threahold', default=0.5, type=float)
+    parser.add_argument('--onlybadcase', default=False, type=bool)
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     cfg.with_gt = args.with_gt
     cfg.rank = 0
     cfg.distributed = False
+    cfg.onlybadcase = args.onlybadcase
 
     for which_set in cfg.which_set:
         mkdir_or_exist(

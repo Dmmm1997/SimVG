@@ -19,9 +19,9 @@ def calc_flops_params(model,
 
 
 parser = argparse.ArgumentParser(description='Inference Time')
-parser.add_argument('--config', default='work_dir/seqtr/seqtr_det_refcoco-unc_yolov3pretrain_size512/20240225_110151_seqtr_det_refcoco-unc_yolov3pretrain.py',
+parser.add_argument('--config', default='work_dir/unimodel/pretrain/AAAI/uni-320/20240630_113050/20240630_113050_uni-320.py',
                     type=str, help='save model path')
-parser.add_argument('--checkpoint', default='work_dir/seqtr/seqtr_det_refcoco-unc_yolov3pretrain_size512/det_best.pth',
+parser.add_argument('--checkpoint', default='work_dir/unimodel/pretrain/AAAI/uni-320/20240630_113050/segm_best.pth',
                     type=str, help='save model path')
 parser.add_argument('--test_samples_number', default=2000, type=int, help='width')
 args = parser.parse_args()
@@ -30,7 +30,7 @@ cfg = Config.fromfile(args.config)
 
 cfg._cfg_dict['data']['samples_per_gpu'] = 1
 
-datasets_cfgs = cfg.data.val
+datasets_cfgs = cfg.data.val_refcoco_unc
 
 datasets = build_dataset(datasets_cfgs)
 dataloaders = build_dataloader(cfg, datasets)
@@ -40,13 +40,22 @@ model = build_model(cfg.model,word_emb=datasets.word_emb,
 model = model.eval()
 
 for inputs in dataloaders:
+    # if "gt_bbox" in inputs:
+    #     with_bbox = True
+    #     if isinstance(inputs["gt_bbox"], torch.Tensor):
+    #         inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
+    #         gt_bbox = inputs.pop("gt_bbox")
+    #     else:
+    #         gt_bbox = inputs.pop("gt_bbox").data[0]
+            
     if "gt_bbox" in inputs:
         with_bbox = True
-        if isinstance(inputs["gt_bbox"], torch.Tensor):
-            inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
-            gt_bbox = inputs.pop("gt_bbox")
-        else:
-            gt_bbox = inputs.pop("gt_bbox").data[0]
+        gt_bbox = inputs.pop("gt_bbox").data[0]
+    if "gt_mask_rle" in inputs:
+        with_mask = True
+        gt_mask = inputs.pop("gt_mask_rle").data[0]
+    if "is_crowd" in inputs:
+        inputs.pop("is_crowd").data[0]
 
     img_metas = inputs["img_metas"].data[0]
 

@@ -1,8 +1,8 @@
-source_dir=configs/unimodel/ablation/ab_uim
-# file_names=$(ls $source_dir)
-# for file_name in $file_names
-file_names=(textattn+boxembed+boxweigted.py)
-for file_name in "${file_names[@]}"
+source_dir=configs/unimodel/ablation/ab_uim_box_w
+file_names=$(ls $source_dir)
+for file_name in $file_names
+# file_names=(uni-384.py)
+# for file_name in "${file_names[@]}"
 do
   related_filename=$source_dir/$file_name
   # train

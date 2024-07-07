@@ -12,4 +12,4 @@ load_from = None
 finetune_from = None
 evaluate_interval = 1
 start_evaluate_epoch = 0
-start_save_checkpoint = 15
+start_save_checkpoint = 10

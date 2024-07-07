@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "0" },
       "args": [
-        "configs/unimodel/ablation/ab_uim/textattn+boxembed+bothweighted.py",
+        "configs/unimodel/ablation/stage2summary/baseline.py",
         // "configs/unimodel/pretrain/uni-256-p16-mixnogoogle.py",
         "--work-dir",
         "work_dir/debug/test",

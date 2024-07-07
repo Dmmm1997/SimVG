@@ -157,21 +157,34 @@ class UniHeadCoarseToFine(nn.Module):
         # ! clip loss
         loss_clip = torch.tensor([0.0], device=device)
         if self.loss_weight["clip"]["box"] + self.loss_weight["clip"]["seg"] > 0:
+            # first stage
+            # box_level_clip_loss_first = torch.tensor([0.0], device=device)
+            # seg_level_clip_loss_first = torch.tensor([0.0], device=device)
+            pred_mask_down2img = F.interpolate(pred_mask_first, size=img_feat.shape[-2:], mode="bilinear", align_corners=True)
+            box_feat_first, [seg_feat_pos_first, seg_feat_neg_first] = self.boxsegpooler(pred_bbox_first, pred_mask_down2img, img_feat, gt=False, img_pool=True)
+            # box
+            box_feat_first = self.box_cons_embedding(box_feat_first)
+            box_level_clip_loss_first = clip_infonNCEloss(box_feat_first, lan_pool, self.clip_loss, self.logit_scale)[0] * 0.1 * self.loss_weight["clip"]["box"]
+            # seg
+            seg_feat_first = self.seg_cons_embedding(seg_feat_pos_first)
+            seg_level_clip_loss_first = clip_infonNCEloss(seg_feat_first, lan_pool, self.clip_loss, self.logit_scale)[0] * 0.1 * self.loss_weight["clip"]["seg"]
+            # second stage
+            # box_level_clip_loss = torch.tensor([0.0], device=device)
+            # seg_level_clip_loss = torch.tensor([0.0], device=device)
             pred_mask_down2seg = F.interpolate(pred_mask_second, size=pred_mask_up4.shape[-2:], mode="bilinear", align_corners=True)
             box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(pred_bbox_second, pred_mask_down2seg, pred_mask_up4, gt=False, img_pool=True)
             # * use the groundtruth to do the contristive loss
             # target_mask_tmp = F.interpolate(target_mask.unsqueeze(1), size=pred_mask_up4.shape[-2:], mode="nearest")
             # target_box_tmp = box_norm(targets["bbox"], img)
             # box_feat, [seg_feat_pos, seg_feat_neg] = self.boxsegpooler(target_box_tmp, target_mask_tmp, pred_mask_up4)
-            box_level_clip_loss = torch.tensor([0.0], device=device)
-            seg_level_clip_loss = torch.tensor([0.0], device=device)
+
             # box
             box_feat = self.box_cons_embedding(box_feat)
-            box_level_clip_loss = clip_infonNCEloss(box_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * self.loss_weight["clip"]["box"]
+            box_level_clip_loss = clip_infonNCEloss(box_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * 0.1 * self.loss_weight["clip"]["box"]
             # seg
             seg_feat = self.seg_cons_embedding(seg_feat_pos)
-            seg_level_clip_loss = clip_infonNCEloss(seg_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * self.loss_weight["clip"]["seg"]
-            loss_clip = box_level_clip_loss + seg_level_clip_loss
+            seg_level_clip_loss = clip_infonNCEloss(seg_feat, lan_pool, self.clip_loss, self.logit_scale)[0] * 0.1 * self.loss_weight["clip"]["seg"]
+            loss_clip = box_level_clip_loss + seg_level_clip_loss + box_level_clip_loss_first + seg_level_clip_loss_first
 
         # ! cons loss
         loss_cons_first = torch.tensor([0.0], device=device)
@@ -186,11 +199,11 @@ class UniHeadCoarseToFine(nn.Module):
             loss_cons_first = (
                 sum(loss_S2B_first) / len(loss_S2B_first) * self.loss_weight["boxsegcc"]["S2B"]
                 + sum(loss_B2S_first) / len(loss_B2S_first) * self.loss_weight["boxsegcc"]["B2S"]
-            ) * self.loss_weight["stage"]["first"]
+            ) * self.loss_weight["stage"]["first"] * 0.1
             loss_cons_second = (
                 sum(loss_S2B_second) / len(loss_S2B_second) * self.loss_weight["boxsegcc"]["S2B"]
                 + sum(loss_B2S_second) / len(loss_B2S_second) * self.loss_weight["boxsegcc"]["B2S"]
-            ) * self.loss_weight["stage"]["second"]
+            ) * self.loss_weight["stage"]["second"] * 0.1
 
         loss_mask = loss_mask_first + loss_mask_second
         loss_det = loss_bbox_first + loss_bbox_second
