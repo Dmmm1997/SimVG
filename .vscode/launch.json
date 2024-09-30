@@ -1,0 +1,81 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "train.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/train.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": { "CUDA_VISIBLE_DEVICES": "1" },
+      "args": [
+        "configs/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco.py",
+        // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
+        "--work-dir",
+        "work_dir/debug/test"
+        // "--load-from", "work_dir/beit3_multibranch/(3-9)decodergt#0decoderpredict#0tokengt_30ep_noweight/20240310_095533/det_best.pth"
+      ]
+    },
+    {
+      "name": "test.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/test.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "work_dir/paper_exp/pretrain/finetune_refer_flickr30k_mix/flickr30k/20240509_070303/20240509_070303_flickr30k.py",
+        "--load-from",
+        "work_dir/paper_exp/pretrain/finetune_refer_flickr30k_mix/flickr30k/20240509_070303/det_best.pth"
+      ]
+    },
+    {
+      "name": "inference.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/inference.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "--output-dir",
+        "visualization/inference"
+      ]
+    },
+    {
+      "name": "this",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      // "args": [
+      //   "configs/beit3/detection/diff_head/grefcoco_beit3_tgqshead_vitbp32_512_maxtoken20_oq1.py"
+      // ]
+    },
+    {
+      "name": "gradcam",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/misc/vis_cam.py",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "gradcam_2",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/misc/heatmap.py",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "demo",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/demo.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

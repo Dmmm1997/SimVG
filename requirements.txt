@@ -1,0 +1,23 @@
+# apex
+mmdet==2.28.1
+mmcv-full==1.7.2
+pydantic
+pycocotools; platform_system == "Linux"
+torch
+numpy==1.24
+ninja
+transformers
+wandb
+fairscale
+einops
+torchscale
+torchmetrics
+SentencePiece
+fvcore
+cloudpickle
+omegaconf
+pickle5
+lmdb
+mmengine
+openpyxl
+# python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
