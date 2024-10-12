@@ -128,5 +128,3 @@ scheduler_config = dict(
 )
 
 log_interval = 50
-
-load_from="work_dir/paper_exp/sota_model/phrase/noema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2_flickr30k/20240327_112108/latest.pth"

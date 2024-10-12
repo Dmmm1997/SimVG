@@ -133,4 +133,4 @@ scheduler_config = dict(
 
 log_interval = 50
 
-finetune_from="work_dir/paper_exp/pretrain/noema#1.0decoder-mixed-tgqg-640/20240325_222441/20240328_061337/latest.pth"
+finetune_from="pretrain_ckpt_path"

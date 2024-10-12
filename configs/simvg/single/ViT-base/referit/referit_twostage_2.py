@@ -129,4 +129,4 @@ scheduler_config = dict(
 
 log_interval = 50
 
-# load_from="work_dir/paper_exp/sota_model/phrase/noema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2_referit/20240327_234619/latest.pth"
+load_from = "stage1_ckpt_path"

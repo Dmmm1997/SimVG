@@ -132,4 +132,3 @@ scheduler_config = dict(
 
 log_interval = 50
 
-finetune_from = "work_dir/paper_exp/sota_model/sota_large/ViTLargeP32-1.0decoder-30ep-640hw-tgqg_layer2_flickr30k/20240419_144708/det_best.pth"

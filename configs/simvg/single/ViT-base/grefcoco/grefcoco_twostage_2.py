@@ -135,4 +135,4 @@ scheduler_config = dict(
 evaluate_interval=2
 start_evaluate_epoch=50
 
-load_from="work_dir/paper_exp/sota_model/grefcoco/**ema_grefcoco_beit3_tgqshead_vitbp32_640_maxtoken20_oq10_ep200/20240328_062705/det_best.pth"
+load_from = "stage1_ckpt_path"

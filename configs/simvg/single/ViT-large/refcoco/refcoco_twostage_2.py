@@ -133,4 +133,4 @@ scheduler_config = dict(
 
 log_interval = 50
 
-load_from = "work_dir/paper_exp/sota_model/sota_large/ViTLargeP32-1.0decoder-30ep-640hw-tgqg_layer2-refcoco/20240404_103821/det_best.pth"
+load_from = "stage1_ckpt_path"

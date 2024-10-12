@@ -126,4 +126,4 @@ scheduler_config = dict(
 
 log_interval = 50
 
-load_from="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcocog_google/20240324_221555/det_best.pth"
+load_from = "stage1_ckpt_path"

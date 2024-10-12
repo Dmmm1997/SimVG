@@ -131,5 +131,3 @@ scheduler_config = dict(
 )
 
 log_interval = 50
-
-load_from="work_dir/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcocoplus/20240325_064716/det_best.pth"
