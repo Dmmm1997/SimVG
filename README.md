@@ -38,7 +38,7 @@ Visual grounding is a common vision task that involves grounding descriptive sen
 ![heatmap](./docs/visualization/heatmap.pdf)  -->
 
 
-This is the official implementation of [SimVG: A Simple Framework for Visual Grounding with Decoupled Multi-modal Fusion](https://arxiv.org/pdf/2409.17531), which simplifies and unifies the modelling for visual grounding tasks under a novel point prediction paradigm. 
+<!-- This is the official implementation of [SimVG: A Simple Framework for Visual Grounding with Decoupled Multi-modal Fusion](https://arxiv.org/pdf/2409.17531), which simplifies and unifies the modelling for visual grounding tasks under a novel point prediction paradigm.  -->
 
 <!-- To this end, different grounding tasks can be tackled in one network with the simple cross-entropy loss. We surpass or maintain on par with state-of-the-arts, and also outperform a set of larget-scale pre-trained models with much less expenditure, suggesting a simple and universal approach is indeed feasible. -->
 
