@@ -19,7 +19,7 @@ SouthEast University
 ## Updates
 
 - **2024.09.26: Our work has been accepted by NeurIPS 2024.**
-- **2024.09.30: The code and model are coming soon.**
+- **2024.10.13: The code and model are released.**
 
 ## Abstract
 
@@ -31,8 +31,8 @@ Visual grounding is a common vision task that involves grounding descriptive sen
 
 
 <!-- ![motivation](./docs/motivation.pdf)   -->
-![overview](./docs/overview.pdf)  
-![model_architecture](docs/model.pdf)  
+![overview](https://github.com/Dmmm1997/SimVG/blob/main/docs/overview.pdf)  
+![model_architecture](https://github.com/Dmmm1997/SimVG/blob/main/docs/model.pdf)  
 <!-- ![visualization](./docs/visualization/visualization.pdf) 
 ![visualization_GREC](./docs/visualization/visualization_grec.pdf) 
 ![heatmap](./docs/visualization/heatmap.pdf)  -->
@@ -41,8 +41,6 @@ Visual grounding is a common vision task that involves grounding descriptive sen
 This is the official implementation of [SimVG: A Simple Framework for Visual Grounding with Decoupled Multi-modal Fusion](https://arxiv.org/pdf/2409.17531), which simplifies and unifies the modelling for visual grounding tasks under a novel point prediction paradigm. 
 
 <!-- To this end, different grounding tasks can be tackled in one network with the simple cross-entropy loss. We surpass or maintain on par with state-of-the-arts, and also outperform a set of larget-scale pre-trained models with much less expenditure, suggesting a simple and universal approach is indeed feasible. -->
-
-
 
 
 ## Installation
