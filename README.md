@@ -31,8 +31,8 @@ Visual grounding is a common vision task that involves grounding descriptive sen
 
 
 <!-- ![motivation](./docs/motivation.pdf)   -->
-![overview](https://github.com/Dmmm1997/SimVG/blob/main/docs/overview.pdf)  
-![model_architecture](https://github.com/Dmmm1997/SimVG/blob/main/docs/model.pdf)  
+![](./docs/overview.png)  
+![](./docs/model.png)  
 <!-- ![visualization](./docs/visualization/visualization.pdf) 
 ![visualization_GREC](./docs/visualization/visualization_grec.pdf) 
 ![heatmap](./docs/visualization/heatmap.pdf)  -->
