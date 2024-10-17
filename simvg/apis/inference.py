@@ -1,9 +1,9 @@
-from visualizer import get_local
-get_local.activate() # 激活装饰器
+# from visualizer import get_local
+# get_local.activate() # 激活装饰器
 import mmcv
 import torch
 import os.path as osp
-from pytorch_grad_cam.utils.image import scale_cam_image, show_cam_on_image
+# from pytorch_grad_cam.utils.image import scale_cam_image, show_cam_on_image
 from simvg.utils import load_checkpoint, get_root_logger
 from simvg.core import imshow_expr_bbox, imshow_expr_mask
 from simvg.models import build_model, ExponentialMovingAverage

@@ -12,7 +12,7 @@ from torchscale.component.embedding import (
 )
 from torchscale.component.multiway_network import MutliwayEmbedding
 
-from visualizer import get_local
+# from visualizer import get_local
 
 
 ######

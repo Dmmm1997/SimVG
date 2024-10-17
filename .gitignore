@@ -1,10 +1,10 @@
-/data/
+data
 *.pyc
-SeqTR.egg-info/
+simvg.egg-info/
 work_dir/
 *.whl
 *.zip
-pretrain_weights/
+pretrain_weights
 visualization/
 visualize/
 vis_cross/

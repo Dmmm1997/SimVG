@@ -7,7 +7,6 @@ import os.path as osp
 from mmdet.core import BitmapMasks
 import pycocotools.mask as maskUtils
 from transformers import BertTokenizer
-from ..vgtr_utils.word_utils import Corpus
 import numpy as np
 from ..builder import PIPELINES
 from transformers import XLMRobertaTokenizer
@@ -71,21 +70,10 @@ class LoadImageAnnotationsFromFile(object):
         ]
         self.dataset = dataset
         self.use_token_type = use_token_type
-        if use_token_type == "bert":
-            self.tokenizer = BertTokenizer.from_pretrained(
-                "bert-base-uncased", do_lower_case="uncased"
-            )
-        elif use_token_type == "copus":
-            self.corpus = Corpus()
-            corpus_path = osp.join(
-                "/home/dmmm/demo_mirror/REC/vgtr/store/data/unc", "corpus.pth"
-            )
-            self.corpus = torch.load(corpus_path)
-        elif use_token_type == "beit3":
-            self.tokenizer = XLMRobertaTokenizer("/home/dmmm/demo_mirror/vlm/unilm/beit3/pretrain_weights/beit3.spm")
-            self.bos_token_id = self.tokenizer.bos_token_id
-            self.eos_token_id = self.tokenizer.eos_token_id
-            self.pad_token_id = self.tokenizer.pad_token_id
+        self.tokenizer = XLMRobertaTokenizer("pretrain_weights/beit3.spm")
+        self.bos_token_id = self.tokenizer.bos_token_id
+        self.eos_token_id = self.tokenizer.eos_token_id
+        self.pad_token_id = self.tokenizer.pad_token_id
 
     def _load_img(self, results):
         if self.file_client is None:

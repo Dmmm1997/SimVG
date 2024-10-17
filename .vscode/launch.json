@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "1" },
       "args": [
-        "configs/paper_exp/sota_model/RefCOCO_series/ema_ViTBaseP32-1.0decoder-45ep-640hw-tgqg_layer2-refcoco.py",
+        "configs/single/ViT-base/refcoco/refcoco_onestage.py",
         // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
         "--work-dir",
         "work_dir/debug/test"

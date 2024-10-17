@@ -3,10 +3,9 @@ import numpy
 from .utils import tokenize
 from .builder import DATASETS
 from .pipelines import Compose
-from pydantic import ListMinLengthError
+# from pydantic import ListMinLengthError
 from torch.utils.data.dataset import Dataset
 from simvg.utils import get_root_logger, is_main
-from .vgtr_utils.word_utils import Corpus
 import torch
 import os
 
@@ -33,7 +32,7 @@ class BaseDataset(Dataset):
             assert isinstance(imgsfile, dict)
             self.imgsfile = imgsfile
         else:
-            raise ListMinLengthError
+            raise TypeError("img_source should be a list of str")
 
         self.anns_all = json.load(open(annsfile, 'r'))
 
