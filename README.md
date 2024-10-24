@@ -66,7 +66,7 @@ pip install -e .
 
 ### Data Preparation
 
-For the construction of the dataset (flickr30k, referit, refercoco/+/g), please refer to the [SeqTR](https://github.com/seanzhuh/SeqTR) repository. For the construction of the grefcoco dataset, please refer to the [GREC](https://github.com/henghuiding/gRefCOCO) repository. In addition, we provide a converted version of the grefcoco dataset [here](https://seunic-my.sharepoint.cn/:f:/g/personal/230238525_seu_edu_cn/Eng4HLU9bN9BrAknGLheTVYBR1EHBD831ZpDmkmuWs7xRQ?e=GKpTtg).
+For the construction of the dataset (flickr30k, referit, refercoco/+/g), please refer to the [SeqTR](https://github.com/seanzhuh/SeqTR) repository. For the construction of the grefcoco dataset, please refer to the [GREC](https://github.com/henghuiding/gRefCOCO) repository. In addition, we provide a converted version of the grefcoco dataset [here](https://seunic-my.sharepoint.cn/:f:/g/personal/230238525_seu_edu_cn/EiX51qGWa9BBlt3fVRwgPhsBUxOIZ-yW3Hm7VXOQ3c2Ipw?e=M12MM6).
 
 
 The data structure should look like the following:
