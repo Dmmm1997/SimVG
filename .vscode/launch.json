@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "1" },
       "args": [
-        "configs/single/ViT-base/refcoco/refcoco_onestage.py",
+        "configs/single/ViT-base/grefcoco/grefcoco_onestage.py",
         // "configs/beit3/detection/diff_head/beit3_tgqshead_det_refcoco-unc_vitbp32_512_maxtoken20_oq1.py"
         "--work-dir",
         "work_dir/debug/test"
