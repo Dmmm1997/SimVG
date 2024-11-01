@@ -44,6 +44,9 @@ Visual grounding is a common vision task that involves grounding descriptive sen
 
 
 ## Installation
+CUDA=11.8
+torch=2.0.0
+torchvision=0.15.0
 
 ### Prerequisites
 
