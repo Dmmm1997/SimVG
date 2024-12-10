@@ -274,8 +274,8 @@ class LoadImageAnnotationsFromFile(object):
         results = self._load_img(results)
         if self.use_token_type=="bert":
             results = self._load_expression_tokenize(results)
-        elif self.use_token_type=="copus":
-            results = self._load_expression_copus(results)
+        elif self.use_token_type=="default":
+            results = self._load_expression(results)
         elif self.use_token_type=="beit3":
             results = self._load_expression_tokenize_beit3(results)
         else:

@@ -119,6 +119,7 @@ class MIXUniModel(OneStageModel):
         gt_mask=None,
         rescale=False,
         epoch=None,
+        visual=True,
     ):
         """Args:
         img (tensor): [batch_size, c, h_batch, w_batch].
@@ -153,7 +154,7 @@ class MIXUniModel(OneStageModel):
             predictions = self.get_predictions(pred_dict, img_metas, rescale=rescale, threshold=self.threshold)
 
         self.iter += 1
-        if is_main() and self.iter % 50 == 0 and self.visualize:
+        if is_main() and self.iter % 3 == 0 and self.visualize and visual:
             self.visualiation(pred_dict, img_metas, targets, self.train_mask_save_target_dir, extra_dict)
 
         return losses_dict, predictions
@@ -204,6 +205,7 @@ class MIXUniModel(OneStageModel):
         gt_bbox=None,
         gt_mask=None,
         rescale=False,
+        visual=True,
     ):
         """Args:
         img (tensor): [batch_size, c, h_batch, w_batch].
@@ -234,7 +236,7 @@ class MIXUniModel(OneStageModel):
         predictions = self.get_predictions(pred_dict, img_metas, rescale=rescale, threshold=self.threshold)
 
         self.iter += 1
-        if is_main() and self.iter % 20 == 0 and self.visualize:
+        if is_main() and self.iter % 3 == 0 and self.visualize and visual:
             self.visualiation(pred_dict, img_metas, targets, self.val_mask_save_target_dir, extra_dict)
 
         return predictions

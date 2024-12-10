@@ -8,10 +8,10 @@ from .one_stage import OneStageModel
 
 @MODELS.register_module()
 class SeqTR(OneStageModel):
-    def __init__(self, word_emb, num_token, vis_enc, lan_enc, head, fusion):
+    def __init__(self, word_emb, num_token, vis_enc, lan_enc, head, fusion, **kwargs):
         super(SeqTR, self).__init__(word_emb, num_token, vis_enc, lan_enc, head, fusion)
 
-    def forward_train(self, img, ref_expr_inds, img_metas, gt_bbox=None, gt_mask_vertices=None, mass_center=None, gt_mask=None, rescale=False):
+    def forward_train(self, img, ref_expr_inds, img_metas, gt_bbox=None, gt_mask_vertices=None, mass_center=None, gt_mask=None, rescale=False, **kwargs):
         """Args:
         img (tensor): [batch_size, c, h_batch, w_batch].
 
@@ -43,7 +43,7 @@ class SeqTR(OneStageModel):
         return losses_dict, predictions
 
     @torch.no_grad()
-    def forward_test(self, img, ref_expr_inds, img_metas, with_bbox=False, with_mask=False, rescale=False):
+    def forward_test(self, img, ref_expr_inds, img_metas, with_bbox=False, with_mask=False, rescale=False, **kwargs):
         """Args:
         img (tensor): [batch_size, c, h_batch, w_batch].
 

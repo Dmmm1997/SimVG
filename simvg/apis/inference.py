@@ -1,8 +1,11 @@
+import cv2
 import mmcv
+import numpy
 import torch
 import os.path as osp
 
-from simvg.core.utils import imshow_box_mask, is_badcase_boxsegioulowerthanthr
+from simvg.core.utils import boxsegiou, imshow_box_mask
+from simvg.models.heads.uni_head_simple import compute_boxiou
 from simvg.utils import load_checkpoint, get_root_logger
 from simvg.core import imshow_expr_bbox, imshow_expr_mask
 from simvg.models import build_model, ExponentialMovingAverage
@@ -67,6 +70,7 @@ def inference_model(cfg):
                 pred_bboxes = [None for _ in range(batch_size)]
                 if with_bbox:
                     pred_bboxes = predictions.pop("pred_bboxes")
+                    pred_bboxes_first = predictions.pop("pred_bboxes_first")
                 if cfg["dataset"] == "GRefCOCO":
                     tmp_pred_bboxes = []
                     for pred_bbox in pred_bboxes:
@@ -80,8 +84,9 @@ def inference_model(cfg):
                 pred_masks = [None for _ in range(batch_size)]
                 if with_mask:
                     pred_masks = predictions.pop("pred_masks")
+                    pred_masks_first = predictions.pop("pred_masks_first")
                     
-                for j, (img_meta, pred_bbox, pred_mask) in enumerate(zip(img_metas, pred_bboxes, pred_masks)):
+                for j, (img_meta, pred_bbox, pred_mask, pred_bbox_first, pred_mask_first) in enumerate(zip(img_metas, pred_bboxes, pred_masks, pred_bboxes_first, pred_masks_first)):
                     filename, expression = img_meta["filename"], img_meta["expression"]
                     bbox_gt, mask_gt = None, None
                     if cfg.with_gt and with_bbox:
@@ -94,24 +99,41 @@ def inference_model(cfg):
                     
                     outfile = osp.join(cfg.output_dir, cfg.dataset + "_" + which_set, expression.replace(" ", "_") + "_" + osp.basename(filename).split(".jpg")[0])
                     badcase=False
-                    if is_badcase_boxsegioulowerthanthr(pred_bbox, pred_mask, 0.7):
+                    bbox_gt /= bbox_gt.new_tensor(scale_factors)
+                    # if boxsegiou(bbox_gt, pred_mask_first)<0.5 and boxsegiou(bbox_gt, pred_mask)>0.7:
+                    # if boxsegiou(pred_bbox, mask_gt)-boxsegiou(pred_bbox_first, mask_gt)>0.05 and compute_boxiou(bbox_gt, pred_bbox)>0.9:
+                    if compute_boxiou(bbox_gt.unsqueeze(0), pred_bbox.unsqueeze(0).cpu()).squeeze()>0.9 and compute_boxiou(bbox_gt.unsqueeze(0), pred_bbox_first.unsqueeze(0).cpu()).squeeze()- compute_boxiou(bbox_gt.unsqueeze(0), pred_bbox.unsqueeze(0).cpu()).squeeze() < -0.1:
+                    # if compute_boxiou(bbox_gt.unsqueeze(0), pred_bbox.unsqueeze(0).cpu()).squeeze()<0.3:
                         badcase = True
                     
                     if not cfg.onlybadcase or (cfg.onlybadcase and badcase):
                         # box seg分开绘制
                         # if with_bbox:
                         #     bbox_gt /= bbox_gt.new_tensor(scale_factors)
-                        #     outfile_det = outfile + "_box.jpg"
-                        #     imshow_expr_bbox(filename, pred_bbox, outfile_det, gt_bbox=bbox_gt)
+                        #     outfile_det = outfile + "_box_fine.jpg"
+                        #     imshow_expr_bbox(filename, pred_bbox, outfile_det, gt_bbox=None)
+                        #     outfile_det = outfile + "_box_course.jpg"
+                        #     imshow_expr_bbox(filename, pred_bbox_first, outfile_det, gt_bbox=None)
                         # if with_mask:
-                        #     outfile_seg = outfile + "_seg.jpg"
-                        #     imshow_expr_mask(filename, pred_mask, outfile_seg, gt_mask=mask_gt, overlay=cfg.overlay)
+                        #     import pycocotools.mask as maskUtils
+                        #     outfile_seg = outfile + "_seg_fine.jpg"
+                        #     # imshow_expr_mask(filename, pred_mask, outfile_seg, gt_mask=mask_gt, overlay=cfg.overlay)
+                        #     imshow_expr_mask(filename, pred_mask, outfile_seg, gt_mask=None, overlay=cfg.overlay)
+                        #     outfile_seg = outfile + "_seg_course.jpg"
+                        #     imshow_expr_mask(filename, pred_mask_first, outfile_seg, gt_mask=None, overlay=cfg.overlay)
+                        #     outfile_seg = outfile + "_only_mask_course.jpg"
+                        #     cv2.imwrite(outfile_seg, (maskUtils.decode(pred_mask_first)*255).astype(numpy.uint8))
+                        #     outfile_seg = outfile + "_only_mask_fine.jpg"
+                        #     cv2.imwrite(outfile_seg, (maskUtils.decode(pred_mask)*255).astype(numpy.uint8))
                         
                         # boxseg合并绘制
                         outfile_pred = outfile+"_pred.jpg"
                         imshow_box_mask(filename, pred_bbox, pred_mask, outfile_pred, gt=False)
                         
-                        bbox_gt /= bbox_gt.new_tensor(scale_factors)
+                        outfile_pred = outfile+"_pred_course.jpg"
+                        imshow_box_mask(filename, pred_bbox_first, pred_mask_first, outfile_pred, gt=False)
+                        
+                        # bbox_gt /= bbox_gt.new_tensor(scale_factors)
                         outfile_gt = outfile+"_gt.jpg"
                         imshow_box_mask(filename, bbox_gt, mask_gt, outfile_gt, gt=True)
 

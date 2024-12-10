@@ -1,4 +1,4 @@
-source_dir=configs/unimodel/ablation/ab_uim_box_w
+source_dir=configs/segmentation/seqtr/refcoco
 file_names=$(ls $source_dir)
 for file_name in $file_names
 # file_names=(uni-384.py)
@@ -20,3 +20,4 @@ do
   CUDA_VISIBLE_DEVICES=0,1 PORT=29520 bash tools/dist_test.sh $related_filename 2 --load-from $checkpoint
   test -----
 done
+

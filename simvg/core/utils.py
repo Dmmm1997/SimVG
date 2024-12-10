@@ -101,7 +101,7 @@ def imshow_expr_bbox(filename, pred_bbox, outfile, gt_bbox=None, pred_bbox_color
     cv2.imwrite(outfile, img)
 
 
-def is_badcase_boxsegioulowerthanthr(box, seg, thr=0.5):
+def boxsegiou(box, seg):
     seg = maskUtils.decode(seg)
     seg = torch.tensor(seg)
     box = box.int()
@@ -111,7 +111,7 @@ def is_badcase_boxsegioulowerthanthr(box, seg, thr=0.5):
     box[2] = torch.clamp(box[2], min=0, max=W - 1)  # x2
     box[3] = torch.clamp(box[3], min=0, max=H - 1)  # y2
     iou = compute_segboxiou(seg, box, threshold=0.5)
-    return iou < thr
+    return iou
 
 
 def imshow_expr_mask(filename, pred_mask, outfile, gt_mask=None, overlay=True):

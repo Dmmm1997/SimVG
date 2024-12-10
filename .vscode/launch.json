@@ -10,7 +10,7 @@
       "justMyCode": true,
       "env": { "CUDA_VISIBLE_DEVICES": "0" },
       "args": [
-        "configs/unimodel/ablation/stage2summary/baseline.py",
+        "configs/unimodel/pretrain/AAAI/uni-320.py",
         // "configs/unimodel/pretrain/uni-256-p16-mixnogoogle.py",
         "--work-dir",
         "work_dir/debug/test",
@@ -36,7 +36,7 @@
       "name": "inference.py",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/tools/inference_badcase.py",
+      "program": "${workspaceFolder}/tools/inference.py",
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [

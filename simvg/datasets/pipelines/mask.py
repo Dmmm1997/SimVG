@@ -30,7 +30,12 @@ class SampleMaskVertices(object):
             mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         contour = sorted(
             contour, key=lambda x: cv2.contourArea(x), reverse=True)
-        contour = contour[0][:, 0, :]  # x, y coordinate of contour
+        try:
+            contour = contour[0][:, 0, :]
+        except:
+            print('contour:', contour)
+            contour = numpy.zeros((1,2),dtype=numpy.int32)# x, y coordinate of contour
+            return numpy.array([-1., -1.]), contour, False
         contour_info = cv2.moments(contour)
         KEEP = False
         if contour_info['m00'] > 0.:

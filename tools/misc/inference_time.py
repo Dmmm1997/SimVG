@@ -23,7 +23,7 @@ parser.add_argument('--config', default='work_dir/unimodel/pretrain/AAAI/uni-320
                     type=str, help='save model path')
 parser.add_argument('--checkpoint', default='work_dir/unimodel/pretrain/AAAI/uni-320/20240630_113050/segm_best.pth',
                     type=str, help='save model path')
-parser.add_argument('--test_samples_number', default=2000, type=int, help='width')
+parser.add_argument('--test_samples_number', default=100, type=int, help='width')
 args = parser.parse_args()
 
 cfg = Config.fromfile(args.config)
@@ -66,6 +66,7 @@ for inputs in dataloaders:
         return_loss=False,
         rescale=False,
         with_bbox=with_bbox,
+        visual=False,
     )
     tmp_inputs = inputs
     break

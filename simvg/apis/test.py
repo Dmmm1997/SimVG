@@ -220,18 +220,8 @@ def evaluate_model(epoch, cfg, model, loader):
         for batch, inputs in enumerate(loader):
             gt_bbox, gt_mask, is_crowd = None, None, None
 
-            # if "gt_bbox" in inputs:
-            #     with_bbox = True
-            #     if isinstance(inputs["gt_bbox"], torch.Tensor):
-            #         inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
-            #         gt_bbox = inputs.pop("gt_bbox")
-            #     else:
-            #         gt_bbox = inputs.pop("gt_bbox").data[0]
-            # if "gt_mask_rle" in inputs:
-            #     with_mask = True
-            #     gt_mask = inputs.pop("gt_mask_rle").data[0]
-
             if "gt_bbox" in inputs:
+                with_bbox = True
                 if isinstance(inputs["gt_bbox"], torch.Tensor):
                     inputs["gt_bbox"] = [inputs["gt_bbox"][ind] for ind in range(inputs["gt_bbox"].shape[0])]
                     gt_bbox = copy.deepcopy(inputs["gt_bbox"])
@@ -239,6 +229,7 @@ def evaluate_model(epoch, cfg, model, loader):
                     gt_bbox = copy.deepcopy(inputs["gt_bbox"].data[0])
 
             if "gt_mask_rle" in inputs:
+                with_mask = True
                 gt_mask = inputs.pop("gt_mask_rle").data[0]
             if "is_crowd" in inputs:
                 is_crowd = inputs.pop("is_crowd").data[0]

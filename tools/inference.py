@@ -8,16 +8,16 @@ from simvg.apis import inference_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="macvg-inference")
-    parser.add_argument('--config', default="work_dir/unimodel/pretrain/uni-384/20240623_192931/20240623_192931_uni-384.py",help='inference config file path.')
+    parser.add_argument('--config', default="work_dir/unimodel/pretrain/AAAI/uni-320/20240630_113050/20240630_113050_uni-320.py",help='inference config file path.')
     parser.add_argument(
-        '--checkpoint', default="work_dir/unimodel/pretrain/uni-384/20240623_192931/segm_best.pth",help='the checkpoint file to load from.')
+        '--checkpoint', default="work_dir/unimodel/pretrain/AAAI/uni-320/20240630_113050/segm_best.pth",help='the checkpoint file to load from.')
     parser.add_argument(
-        '--output-dir', default="visualization/val_refcoco", help='directory where inference results will be saved.')
+        '--output-dir', default="visualization/test_refcocoplus_unc_course-to-fine", help='directory where inference results will be saved.')
     parser.add_argument('--with-gt', action='store_true', default=True,
                         help='draw ground-truth bbox/mask on image if true.')
     parser.add_argument('--no-overlay', action='store_false', dest='overlay')
     parser.add_argument('--score-threahold', default=0.5, type=float)
-    parser.add_argument('--onlybadcase', default=False, type=bool)
+    parser.add_argument('--onlybadcase', default=True, type=bool)
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -32,7 +32,7 @@ def parse_args():
         '--which-set',
         type=str,
         nargs='+',
-        default='val_refcoco_unc',
+        default='testB_refcocoplus_unc',
         help="evaluation which_sets, which depends on the dataset, e.g., \
         'val', 'testA', 'testB' for RefCOCO(Plus)UNC, and 'val', 'test' for RefCOCOgUMD.")
     args = parser.parse_args()

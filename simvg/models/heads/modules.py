@@ -68,7 +68,7 @@ class QueryAugment(nn.Module):
             attn_dropout=0.1,
             feedforward_dim=1024,
             ffn_dropout=0.1,
-            num_layers=3,
+            num_layers=1,
             return_intermediate=False,
             post_norm=True,
         )
@@ -756,6 +756,7 @@ class UnifiedInteractionModule(nn.Module):
         # ! type 3 add text interaction concat SA
         box_embed = box_feat.unsqueeze(1).transpose(0, 1)
         heatmap_mean = torch.mean(img_feat, dim=1, keepdim=True)
+        # heatmap_mean = img_feat[:, 0:1]
         min_vals = heatmap_mean.amin(dim=(2, 3), keepdim=True)  # 在 H 和 W 维度上取最小值
         max_vals = heatmap_mean.amax(dim=(2, 3), keepdim=True)  # 在 H 和 W 维度上取最大值
         img_feat_norm = (heatmap_mean - min_vals) / (max_vals-min_vals+1e-8)

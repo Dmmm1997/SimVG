@@ -73,7 +73,8 @@ def train_model(epoch, cfg, model, model_ema, optimizer, loader):
 
         losses, predictions = model(**inputs, gt_mask=gt_mask, epoch=epoch, rescale=False)
 
-        loss_det = losses.pop("loss_det", torch.tensor([0.0], device=device))
+        # loss_multitask = losses.pop("loss_multi_task", torch.tensor([0.0], device=device))
+        loss_det = losses.pop("loss_det", torch.tensor([0.0], device=device)) + losses.pop("loss_multi_task", torch.tensor([0.0], device=device))
         loss_mask = losses.pop("loss_mask", torch.tensor([0.0], device=device))
         loss_cons = losses.pop("loss_cons", torch.tensor([0.0], device=device))
         loss_clip = losses.pop("loss_clip", torch.tensor([0.0], device=device))
