@@ -226,7 +226,7 @@ python tools/test.py [PATH_TO_CONFIG_FILE] --load-from [PATH_TO_CHECKPOINT_FILE]
 <td>SimVG(ViT-L/32, DB)</td><td align="center">80.42</td><td align="center">-</td><td align="center">85.72</td><td align="center">86.70</td><td align="center"><a href="https://seunic-my.sharepoint.cn/:f:/g/personal/230238525_seu_edu_cn/EpQVFzJfPntCr_zEoqboy9MBCpEutyy0rRbTyY2erZYiaA?e=UMRqXC">model & log</a></td>
 </tr>
 <tr>
-<td>SimVG(ViT-L/32, refcocoallpretrain, two-stage distillation, TB)</td><td align="center">-</td><td align="center"><a href="">model & log</a></td><td align="center">87.99</td><td align="center">89.15</td><td align="center"><a href="https://seunic-my.sharepoint.cn/:f:/g/personal/230238525_seu_edu_cn/Elvx1Ec01oxCucvwG6DU7CwBwOhJH6MFk5LjZqPB-Aas6A?e=qHbP2M">model & log</a></td>
+<td>SimVG(ViT-L/32, refcocoallpretrain, two-stage distillation, TB)</td><td align="center">-</td><td align="center">-</td><td align="center">87.99</td><td align="center">89.15</td><td align="center"><a href="https://seunic-my.sharepoint.cn/:f:/g/personal/230238525_seu_edu_cn/Elvx1Ec01oxCucvwG6DU7CwBwOhJH6MFk5LjZqPB-Aas6A?e=qHbP2M">model & log</a></td>
 </tr>
 
 </table>
