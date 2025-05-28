@@ -18,6 +18,7 @@ SouthEast University
 
 ## Updates
 
+- **2025.05.28: New work [C3VG](https://github.com/Dmmm1997/C3VG) accepted by AAAI 2025 has been open-sourced.**
 - **2024.09.26: Our work has been accepted by NeurIPS 2024.**
 - **2024.10.13: The code and model are released.**
 
