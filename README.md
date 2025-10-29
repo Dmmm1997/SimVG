@@ -6,21 +6,13 @@ SouthEast University
 
 <a href='https://arxiv.org/pdf/2409.17531'><img src='https://img.shields.io/badge/ArXiv-2409.17531-red'></a>
 
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/simvg-a-simple-framework-for-visual-grounding/generalized-referring-expression)](https://paperswithcode.com/sota/generalized-referring-expression?p=simvg-a-simple-framework-for-visual-grounding)
-
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/simvg-a-simple-framework-for-visual-grounding/referring-expression-comprehension-on-refcoco)](https://paperswithcode.com/sota/referring-expression-comprehension-on-refcoco?p=simvg-a-simple-framework-for-visual-grounding)
-
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/simvg-a-simple-framework-for-visual-grounding/referring-expression-comprehension-on-refcoco-1)](https://paperswithcode.com/sota/referring-expression-comprehension-on-refcoco-1?p=simvg-a-simple-framework-for-visual-grounding)
-
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/simvg-a-simple-framework-for-visual-grounding/referring-expression-comprehension-on-1)](https://paperswithcode.com/sota/referring-expression-comprehension-on-1?p=simvg-a-simple-framework-for-visual-grounding)
-
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/simvg-a-simple-framework-for-visual-grounding/referring-expression-comprehension-on)](https://paperswithcode.com/sota/referring-expression-comprehension-on?p=simvg-a-simple-framework-for-visual-grounding)
-
 ## Updates
 
-- **2025.05.28: New work [C3VG](https://github.com/Dmmm1997/C3VG) accepted by AAAI 2025 has been open-sourced.**
-- **2024.09.26: Our work has been accepted by NeurIPS 2024.**
-- **2024.10.13: The code and model are released.**
+* **2025.10.11:** Our generalized visual grounding work, [InstanceVG](https://github.com/Dmmm1997/InstanceVG) (accepted to TPAMI 2025), has been open-sourced.
+* **2025.07.03:** [DeRIS](https://github.com/Dmmm1997/DeRIS), our new work on Referring Image Segmentation (RIS) that decouples perception and understanding (accepted to ICCV 2025), has been open-sourced.
+* **2025.05.28:** Our work on visual grounding with consistency constraints, [C3VG](https://github.com/Dmmm1997/C3VG) (accepted to AAAI 2025), has been open-sourced.
+* **2024.09.26:** Our work has been accepted to NeurIPS 2024.
+* **2024.10.13:** The code and model have been released.
 
 ## Abstract
 
