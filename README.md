@@ -11,8 +11,9 @@ SouthEast University
 * **2025.10.11:** Our generalized visual grounding work, [InstanceVG](https://github.com/Dmmm1997/InstanceVG) (accepted to TPAMI 2025), has been open-sourced.
 * **2025.07.03:** [DeRIS](https://github.com/Dmmm1997/DeRIS), our new work on Referring Image Segmentation (RIS) that decouples perception and understanding (accepted to ICCV 2025), has been open-sourced.
 * **2025.05.28:** Our work on visual grounding with consistency constraints, [C3VG](https://github.com/Dmmm1997/C3VG) (accepted to AAAI 2025), has been open-sourced.
+* * **2024.10.13:** The code and model have been released.
 * **2024.09.26:** Our work has been accepted to NeurIPS 2024.
-* **2024.10.13:** The code and model have been released.
+
 
 ## Abstract
 
